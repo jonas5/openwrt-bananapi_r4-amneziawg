@@ -133,8 +133,13 @@ jobs:
           VERSION="${OPENWRT_VERSION}"
           DOWNLOAD_VERSION="${VERSION#v}"  # Strip 'v' prefix
           
-          # Start with fresh defconfig (clean minimal config)
-          echo "Running make defconfig to create clean configuration..."
+          # Update feeds FIRST (this is critical - feeds provide config patches)
+          echo "Updating feeds (critical step before defconfig)..."
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+          
+          # Start with fresh defconfig (feeds must be updated first)
+          echo "Running make defconfig..."
           make defconfig
           
           # Append device-specific or generic config based on architecture + device
@@ -170,10 +175,6 @@ jobs:
           else
             echo "WARNING: No config file found"
           fi
-          
-          # Update and install feeds
-          ./scripts/feeds update -a
-          ./scripts/feeds install -a
           # Install host build tools first (m4, flex, etc) - required before kernel compile
           echo "Installing host build tools (tools/install) - required for kernel build"
           if ! make tools/install -j${JOBS}; then
