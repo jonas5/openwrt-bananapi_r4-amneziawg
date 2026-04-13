@@ -138,12 +138,22 @@ jobs:
           ./scripts/feeds update -a
           ./scripts/feeds install -a
           
+          # Unset TARGET_ARCH so scripts/config/conf builds as a host tool (not cross-compiled)
+          # This is critical - TARGET_ARCH=mediatek/filogic causes cc to receive "mediatek/filogic" as a filename!
+          unset TARGET_ARCH
+          unset TARGET_SUBTARGET
+          unset TARGET_BOARD
+          unset TARGET_PROFILE
+          
           # Start with fresh defconfig (feeds must be updated first)
           echo "Running make defconfig (with verbose output)..."
           make defconfig V=s || {
             echo "ERROR: make defconfig failed"
             exit 1
           }
+          
+          # Restore TARGET_ARCH for later steps
+          export TARGET_ARCH="${ARCH}"
           
           # Append device-specific or generic config based on architecture + device
           ARCH_NAME="${ARCH%%/*}"  # Extract first part (e.g., mediatek from mediatek/filogic)
