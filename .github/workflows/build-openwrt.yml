@@ -128,7 +128,7 @@ jobs:
           # Try to download target defconfig; fall back to make defconfig if unavailable
           if ! wget -4 "https://downloads.openwrt.org/releases/${OPENWRT_VERSION:-latest}/targets/${ARCH}/config.buildinfo" -O .config 2>/dev/null; then
             echo "WARNING: Could not download config.buildinfo for ${ARCH}, using defconfig"
-            wget -4 "https://downloads.openwrt.org/snapshots/targets/${ARCH}/config.buildinfo" -O .config 2>/dev/null; then
+            wget -4 "https://downloads.openwrt.org/snapshots/targets/${ARCH}/config.buildinfo" -O .config 2>/dev/null
 
             make defconfig
           fi
