@@ -216,6 +216,12 @@ jobs:
         run: |
           set -eux
           cd "$OPENWRT_SRC"
+          # CRITICAL: Unset TARGET_ARCH to prevent cross-compilation of host tools
+          # This is needed because GitHub Actions inherits environment variables from previous steps
+          unset TARGET_ARCH
+          unset TARGET_SUBTARGET
+          unset TARGET_BOARD
+          unset TARGET_PROFILE
           # Build a minimal set of host tools required for packaging instead of full tools/install.
           # This attempts to compile only what's needed to run package prepare/compile (libdeflate, apk, openssl).
           # If any of these targets are not present in the OpenWrt tree, fall back to tools/install.
