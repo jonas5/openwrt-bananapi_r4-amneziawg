@@ -133,28 +133,8 @@ jobs:
           VERSION="${OPENWRT_VERSION}"
           DOWNLOAD_VERSION="${VERSION#v}"  # Strip 'v' prefix
           
-          # Download target config from OpenWrt downloads site
-          # Releases use: https://downloads.openwrt.org/releases/{version}/targets/{arch}/config.buildinfo
-          # Snapshots use: https://downloads.openwrt.org/snapshots/targets/{arch}/config.buildinfo
-          # Note: config.buildinfo contains CONFIG_* lines (no comment prefix)
-          if [ "${VERSION}" = "snapshot" ]; then
-            echo "Downloading config from snapshots..."
-            wget -4 "https://downloads.openwrt.org/snapshots/targets/${ARCH}/config.buildinfo" -O .config
-          else
-            echo "Downloading config from releases (${DOWNLOAD_VERSION})..."
-            wget -4 "https://downloads.openwrt.org/releases/${DOWNLOAD_VERSION}/targets/${ARCH}/config.buildinfo" -O .config
-          fi
-          
-          # Clean config: keep only CONFIG_ lines and empty lines (remove any stray text)
-          echo "Cleaning config (keeping only CONFIG_ lines)..."
-          grep -E '^CONFIG_' .config > .config.clean || true
-          # Add a comment header so make defconfig knows it's a valid config
-          echo "# OpenWrt configuration (cleaned)" > .config
-          cat .config.clean >> .config
-          rm -f .config.clean
-          
-          # Now run make defconfig to regenerate proper config (with scripts/config/conf)
-          echo "Regenerating config with make defconfig..."
+          # Start with fresh defconfig (clean minimal config)
+          echo "Running make defconfig to create clean configuration..."
           make defconfig
           
           # Append device-specific or generic config based on architecture + device
@@ -191,7 +171,7 @@ jobs:
             echo "WARNING: No config file found"
           fi
           
-          # Update and install feeds AFTER make defconfig
+          # Update and install feeds
           ./scripts/feeds update -a
           ./scripts/feeds install -a
           # Install host build tools first (m4, flex, etc) - required before kernel compile
