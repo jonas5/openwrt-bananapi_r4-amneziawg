@@ -129,6 +129,7 @@ jobs:
           set -eux
           cd "$OPENWRT_SRC"
           ARCH="${TARGET_ARCH}"
+          DEVICE="${TARGET_DEVICE:-}"
           VERSION="${OPENWRT_VERSION}"
           DOWNLOAD_VERSION="${VERSION#v}"  # Strip 'v' prefix
           
