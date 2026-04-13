@@ -75,6 +75,10 @@ jobs:
         run: |
           set -eux
           cd "$OPENWRT_SRC"
+          # Build host tools required for packaging (openssl, libdeflate-gzip, etc)
+          # This is smaller than a full toolchain build but necessary for package compilation.
+          make tools/install -j${JOBS}
+
           # Rebuild package index so make knows about newly added package/* directories
           make package/index
           # Build sequence: prepare and compile required packages only. Keep JOBS small on hosted runners.
