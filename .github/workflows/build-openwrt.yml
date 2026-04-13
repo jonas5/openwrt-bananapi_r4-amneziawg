@@ -123,8 +123,7 @@ jobs:
                 fi
               fi
             done
-            done
-
+            
             # Build the host apk tool (compile + install)
             if make -n package/system/apk/host/compile >/dev/null 2>&1; then
               make package/system/apk/host/compile -j${JOBS}
