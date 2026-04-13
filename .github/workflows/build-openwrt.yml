@@ -29,8 +29,30 @@ jobs:
           mkdir -p "$OPENWRT_SRC/package"
           # Copy package/* from the repository into the OpenWrt package directory
           if [ -d "${{ github.workspace }}/package" ]; then
-            rsync -a "${{ github.workspace }}/package/" "$OPENWRT_SRC/package/"
+            # Use cp -a to preserve layout and ensure files land under $OPENWRT_SRC/package
+            cp -a "${{ github.workspace }}/package/." "$OPENWRT_SRC/package/"
           fi
+
+      - name: Verify packages copied
+        run: |
+          echo "Repository package/ contents:"
+          ls -la "${{ github.workspace }}/package" || true
+          echo "OpenWrt package/ contents after copy:"
+          ls -la "$OPENWRT_SRC/package" || true
+
+      - name: Ensure package Makefiles exist
+        run: |
+          set -eux
+          pkgs=( amneziawg-tools kmod-amneziawg luci-proto-amneziawg )
+          for p in "${pkgs[@]}"; do
+            if [ ! -f "$OPENWRT_SRC/package/$p/Makefile" ]; then
+              echo "ERROR: package Makefile missing for '$p'"
+              echo "Contents of $OPENWRT_SRC/package/$p (if any):"
+              ls -la "$OPENWRT_SRC/package/$p" || true
+              exit 1
+            fi
+            echo "Found Makefile for $p"
+          done
 
       - name: Prepare OpenWrt build config and feeds
         run: |
@@ -53,15 +75,17 @@ jobs:
         run: |
           set -eux
           cd "$OPENWRT_SRC"
+          # Rebuild package index so make knows about newly added package/* directories
+          make package/index
           # Build sequence: prepare and compile required packages only. Keep JOBS small on hosted runners.
-          make package/luci-proto-amneziawg/{clean,download,prepare} V=s || true
-          make package/luci-proto-amneziawg/compile -j${JOBS} V=s || true
+          make package/luci-proto-amneziawg/{clean,download,prepare} V=s
+          make package/luci-proto-amneziawg/compile -j${JOBS} V=s
 
-          make package/kmod-amneziawg/{clean,download,prepare} V=s || true
-          make package/kmod-amneziawg/compile -j${JOBS} V=s || true
+          make package/kmod-amneziawg/{clean,download,prepare} V=s
+          make package/kmod-amneziawg/compile -j${JOBS} V=s
 
-          make package/amneziawg-tools/{clean,download,prepare} V=s || true
-          make package/amneziawg-tools/compile -j${JOBS} V=s || true
+          make package/amneziawg-tools/{clean,download,prepare} V=s
+          make package/amneziawg-tools/compile -j${JOBS} V=s
 
       - name: Collect APK artifacts
         run: |
