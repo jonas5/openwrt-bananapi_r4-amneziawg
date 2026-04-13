@@ -70,6 +70,18 @@ jobs:
           ./scripts/feeds update -a
           ./scripts/feeds install -a
           make defconfig
+          # Install host build tools first (m4, flex, etc) - required before kernel compile
+          echo "Installing host build tools (tools/install) - required for kernel build"
+          if ! make tools/install -j${JOBS}; then
+            echo "tools/install failed; re-running with verbose output"
+            make tools/install V=s -j1 || true
+          fi
+          # Install cross toolchain (required for kernel compilation)
+          echo "Installing cross toolchain (this may take a while)..."
+          if ! make toolchain/install -j${JOBS}; then
+            echo "toolchain/install failed; re-running with verbose output"
+            make toolchain/install V=s -j1 || true
+          fi
           # Prepare kernel sources/headers early so kmod packages can prepare against them
           echo "Preparing kernel sources/headers for target (early)..."
           make target/linux/prepare -j${JOBS}
@@ -80,9 +92,6 @@ jobs:
             make target/linux/compile V=s -j1
             exit 1
           fi
-          # Install cross toolchain (required for some package builds and host tools)
-          echo "Installing cross toolchain (this may take a while)..."
-          make toolchain/install -j${JOBS}
 
       - name: Build packages (prepare + compile)
         run: |
