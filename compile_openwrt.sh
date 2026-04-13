@@ -55,7 +55,23 @@ if [ -d "$OPENWRT_DIR" ]; then
     echo "  Reusing existing directory..."
 else
     # Allow overriding the OpenWrt source path via OPENWRT_SRC (useful for CI)
-    OPENWRT_SRC="${OPENWRT_SRC:-$BUILD_DIR/openwrt-main}"
+    # If OPENWRT_SRC is provided but its parent directory is not writable (eg. '/openwrt-main'),
+    # fall back to cloning into the workspace under $BUILD_DIR/openwrt-main.
+    PROVIDED_OPENWRT_SRC="${OPENWRT_SRC:-}"
+    if [ -n "$PROVIDED_OPENWRT_SRC" ]; then
+        PARENT_DIR=$(dirname "$PROVIDED_OPENWRT_SRC")
+        if [ -d "$PROVIDED_OPENWRT_SRC" ]; then
+            OPENWRT_SRC="$PROVIDED_OPENWRT_SRC"
+        elif [ -w "$PARENT_DIR" ]; then
+            OPENWRT_SRC="$PROVIDED_OPENWRT_SRC"
+        else
+            echo "  WARNING: provided OPENWRT_SRC parent ($PARENT_DIR) is not writable. Falling back to workspace path."
+            OPENWRT_SRC="$BUILD_DIR/openwrt-main"
+        fi
+    else
+        OPENWRT_SRC="$BUILD_DIR/openwrt-main"
+    fi
+
     if [ -d "$OPENWRT_SRC" ]; then
         echo "  Copying OpenWrt source from $OPENWRT_SRC"
         cp -r "$OPENWRT_SRC" "$OPENWRT_DIR"
