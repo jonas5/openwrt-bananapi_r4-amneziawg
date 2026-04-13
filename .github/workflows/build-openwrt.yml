@@ -136,7 +136,7 @@ jobs:
           # Download target config from OpenWrt downloads site
           # Releases use: https://downloads.openwrt.org/releases/{version}/targets/{arch}/config.buildinfo
           # Snapshots use: https://downloads.openwrt.org/snapshots/targets/{arch}/config.buildinfo
-          # Note: config.buildinfo may contain non-CONFIG lines; we filter them
+          # Note: config.buildinfo contains CONFIG_* lines (no comment prefix)
           if [ "${VERSION}" = "snapshot" ]; then
             echo "Downloading config from snapshots..."
             wget -4 "https://downloads.openwrt.org/snapshots/targets/${ARCH}/config.buildinfo" -O .config
@@ -145,10 +145,13 @@ jobs:
             wget -4 "https://downloads.openwrt.org/releases/${DOWNLOAD_VERSION}/targets/${ARCH}/config.buildinfo" -O .config
           fi
           
-          # Filter .config to only include CONFIG_ lines and comments (remove any stray text like "mediatek/filogic")
-          echo "Cleaning config (removing non-CONFIG lines)..."
-          grep -E '^(# |CONFIG_)' .config > .config.clean || true
-          mv .config.clean .config
+          # Clean config: keep only CONFIG_ lines and empty lines (remove any stray text)
+          echo "Cleaning config (keeping only CONFIG_ lines)..."
+          grep -E '^CONFIG_' .config > .config.clean || true
+          # Add a comment header so make defconfig knows it's a valid config
+          echo "# OpenWrt configuration (cleaned)" > .config
+          cat .config.clean >> .config
+          rm -f .config.clean
           
           # Now run make defconfig to regenerate proper config (with scripts/config/conf)
           echo "Regenerating config with make defconfig..."
