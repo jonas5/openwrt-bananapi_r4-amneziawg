@@ -133,21 +133,36 @@ jobs:
           VERSION="${OPENWRT_VERSION}"
           DOWNLOAD_VERSION="${VERSION#v}"  # Strip 'v' prefix
           
-          # Download target defconfig from OpenWrt downloads site
+          # Download target config from OpenWrt downloads site
           # Releases use: https://downloads.openwrt.org/releases/{version}/targets/{arch}/config.buildinfo
           # Snapshots use: https://downloads.openwrt.org/snapshots/targets/{arch}/config.buildinfo
+          # Note: config.buildinfo has minimal config; use .config if available (includes host tools)
+          CONFIG_DOWNLOADED=false
           if [ "${VERSION}" = "snapshot" ]; then
-            echo "Downloading config.buildinfo from snapshots..."
-            if ! wget -4 "https://downloads.openwrt.org/snapshots/targets/${ARCH}/config.buildinfo" -O .config 2>/dev/null; then
-              echo "WARNING: Could not download config.buildinfo from snapshots, using defconfig"
-              make defconfig
+            echo "Downloading config from snapshots..."
+            # Try .config first (includes host tools)
+            if wget -4 "https://downloads.openwrt.org/snapshots/targets/${ARCH}/.config" -O .config 2>/dev/null; then
+              CONFIG_DOWNLOADED=true
+              echo "Downloaded full .config from snapshots"
+            elif wget -4 "https://downloads.openwrt.org/snapshots/targets/${ARCH}/config.buildinfo" -O .config 2>/dev/null; then
+              CONFIG_DOWNLOADED=true
+              echo "Downloaded config.buildinfo from snapshots"
             fi
           else
-            echo "Downloading config.buildinfo from releases (${DOWNLOAD_VERSION})..."
-            if ! wget -4 "https://downloads.openwrt.org/releases/${DOWNLOAD_VERSION}/targets/${ARCH}/config.buildinfo" -O .config 2>/dev/null; then
-              echo "WARNING: Could not download config.buildinfo for ${DOWNLOAD_VERSION}, using defconfig"
-              make defconfig
+            echo "Downloading config from releases (${DOWNLOAD_VERSION})..."
+            # Try .config first (includes host tools)
+            if wget -4 "https://downloads.openwrt.org/releases/${DOWNLOAD_VERSION}/targets/${ARCH}/.config" -O .config 2>/dev/null; then
+              CONFIG_DOWNLOADED=true
+              echo "Downloaded full .config from releases (${DOWNLOAD_VERSION})"
+            elif wget -4 "https://downloads.openwrt.org/releases/${DOWNLOAD_VERSION}/targets/${ARCH}/config.buildinfo" -O .config 2>/dev/null; then
+              CONFIG_DOWNLOADED=true
+              echo "Downloaded config.buildinfo from releases (${DOWNLOAD_VERSION})"
             fi
+          fi
+          
+          if [ "$CONFIG_DOWNLOADED" = "false" ]; then
+            echo "WARNING: Could not download config, using defconfig"
+            make defconfig
           fi
           
           # Append device-specific or generic config based on architecture + device
@@ -181,7 +196,7 @@ jobs:
             cat "$CONFIG_FILE" >> .config
             echo "Appended $(basename $CONFIG_FILE) to .config"
           else
-            echo "WARNING: No config file found; using defconfig defaults"
+            echo "WARNING: No config file found; using downloaded config"
           fi
           
           ./scripts/feeds update -a
