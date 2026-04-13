@@ -79,30 +79,33 @@ jobs:
           # This attempts to compile only what's needed to run package prepare/compile (libdeflate, apk, openssl).
           # If any of these targets are not present in the OpenWrt tree, fall back to tools/install.
           set -eux
-          # Build libdeflate (used by apk and other host tools)
-          if [ -d tools/libdeflate ]; then
-            make -C tools/libdeflate -j${JOBS} compile
-          fi
+          # Try building a minimal set of host tools in a subshell. If any step fails
+          # (for example due to missing host-build.mk), fall back to building the full tools/install.
+          (
+            set -eux
+            # Build libdeflate
+            if make -n tools/libdeflate/compile >/dev/null 2>&1; then
+              make tools/libdeflate/compile -j${JOBS}
+            fi
 
-          # Build ninja (used by some host packages build systems)
-          if [ -d tools/ninja ]; then
-            make -C tools/ninja -j${JOBS} compile
-          fi
+            # Build ninja
+            if make -n tools/ninja/compile >/dev/null 2>&1; then
+              make tools/ninja/compile -j${JOBS}
+            fi
 
-          # Build the host apk tool (provides libdeflate-gzip and related helpers)
-          if make -n package/system/apk/host/compile >/dev/null 2>&1; then
-            make package/system/apk/host/compile -j${JOBS}
-          fi
+            # Build the host apk tool
+            if make -n package/system/apk/host/compile >/dev/null 2>&1; then
+              make package/system/apk/host/compile -j${JOBS}
+            fi
 
-          # Build host openssl if available (used during some package prepare steps)
-          if make -n package/openssl/host/compile >/dev/null 2>&1; then
-            make package/openssl/host/compile -j${JOBS}
-          else
-            echo "Note: package/openssl host target not found; will try full tools/install if later steps fail"
-          fi
-
-          # If any required host binaries are still missing later, consider falling back to:
-          #   make tools/install -j${JOBS}
+            # Build host openssl if available
+            if make -n package/openssl/host/compile >/dev/null 2>&1; then
+              make package/openssl/host/compile -j${JOBS}
+            fi
+          ) || {
+            echo "Minimal host tool build failed, falling back to make tools/install"
+            make tools/install -j${JOBS}
+          }
 
           # Rebuild package index so make knows about newly added package/* directories
           make package/index
