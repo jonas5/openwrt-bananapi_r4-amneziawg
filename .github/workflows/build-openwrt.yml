@@ -86,41 +86,59 @@ jobs:
 
             # Build small host toolchain pieces commonly required by host package builds
             for t in tools/sed tools/patch tools/tar tools/m4 tools/libdeflate tools/ninja; do
-              if make -n ${t}/compile >/dev/null 2>&1; then
-                echo "Building ${t}..."
-                make ${t}/compile -j${JOBS}
-                # After build, try to locate the expected host binary and print diagnostics
-                case "$t" in
-                  tools/sed) bin=sed ;;
-                  tools/patch) bin=patch ;;
-                  tools/tar) bin=tar ;;
-                  tools/m4) bin=m4 ;;
-                  tools/libdeflate) bin=libdeflate-gzip ;;
-                  tools/ninja) bin=ninja ;;
-                  *) bin= ;;
-                esac
-                if [ -n "${bin}" ]; then
-                  if [ -x "${PWD}/staging_dir/host/bin/${bin}" ]; then
-                    echo "Found ${bin} at staging_dir/host/bin/${bin}"
-                    # Print version or file info when possible
-                    ${PWD}/staging_dir/host/bin/${bin} --version 2>/dev/null || ${PWD}/staging_dir/host/bin/${bin} -V 2>/dev/null || true
-                  else
-                    echo "Binary ${bin} not found in staging_dir/host/bin after building ${t}"
-                    echo "Contents of staging_dir/host/bin:"; ls -la "${PWD}/staging_dir/host/bin" || true
-                    echo "Contents of build_dir/hostpkg (recent):"; ls -la "${PWD}/build_dir/hostpkg" | tail -n 20 || true
+              # Try to build sed explicitly; other tools use 'make -n' to check availability
+              if [ "$t" = "tools/sed" ]; then
+                echo "Building ${t} (explicit compile + install)..."
+                make ${t}/compile -j${JOBS} || true
+                make ${t}/install || true
+              else
+                if make -n ${t}/compile >/dev/null 2>&1; then
+                  echo "Building ${t} (compile + install)..."
+                  make ${t}/compile -j${JOBS}
+                  # Attempt to run the install step for this tool if available
+                  if make -n ${t}/install >/dev/null 2>&1; then
+                    make ${t}/install || true
                   fi
                 fi
               fi
+
+              # After build+install, try to locate the expected host binary and print diagnostics
+              case "$t" in
+                tools/sed) bin=sed ;;
+                tools/patch) bin=patch ;;
+                tools/tar) bin=tar ;;
+                tools/m4) bin=m4 ;;
+                tools/libdeflate) bin=libdeflate-gzip ;;
+                tools/ninja) bin=ninja ;;
+                *) bin= ;;
+              esac
+              if [ -n "${bin}" ]; then
+                if [ -x "${PWD}/staging_dir/host/bin/${bin}" ]; then
+                  echo "Found ${bin} at staging_dir/host/bin/${bin}"
+                  ${PWD}/staging_dir/host/bin/${bin} --version 2>/dev/null || ${PWD}/staging_dir/host/bin/${bin} -V 2>/dev/null || true
+                else
+                  echo "Binary ${bin} not found in staging_dir/host/bin after building ${t}"
+                  echo "Contents of staging_dir/host/bin:"; ls -la "${PWD}/staging_dir/host/bin" || true
+                  echo "Contents of build_dir/hostpkg (recent):"; ls -la "${PWD}/build_dir/hostpkg" | tail -n 20 || true
+                fi
+              fi
+            done
             done
 
-            # Build the host apk tool
+            # Build the host apk tool (compile + install)
             if make -n package/system/apk/host/compile >/dev/null 2>&1; then
               make package/system/apk/host/compile -j${JOBS}
+              if make -n package/system/apk/host/install >/dev/null 2>&1; then
+                make package/system/apk/host/install || true
+              fi
             fi
 
-            # Build host openssl if available
+            # Build host openssl if available (compile + install)
             if make -n package/openssl/host/compile >/dev/null 2>&1; then
               make package/openssl/host/compile -j${JOBS}
+              if make -n package/openssl/host/install >/dev/null 2>&1; then
+                make package/openssl/host/install || true
+              fi
             fi
           ) || {
             echo "Minimal host tool build failed, falling back to make tools/install"
