@@ -152,8 +152,9 @@ jobs:
             exit 1
           }
           
-          # Restore TARGET_ARCH for later steps
-          export TARGET_ARCH="${ARCH}"
+          # Restore TARGET_ARCH for later steps (but don't export - let .config define it)
+          # The .config file already has the target architecture, so we don't need env var
+          # export TARGET_ARCH="${ARCH}"
           
           # Append device-specific or generic config based on architecture + device
           ARCH_NAME="${ARCH%%/*}"  # Extract first part (e.g., mediatek from mediatek/filogic)
