@@ -134,10 +134,16 @@ jobs:
 
             # Build host openssl if available (compile + install)
             if make -n package/openssl/host/compile >/dev/null 2>&1; then
-              make package/openssl/host/compile -j${JOBS}
+              echo "Attempting explicit package/openssl host build"
+              make package/openssl/host/compile -j${JOBS} || true
               if make -n package/openssl/host/install >/dev/null 2>&1; then
                 make package/openssl/host/install || true
               fi
+            fi
+
+            # Try ninja host install explicitly when available
+            if make -n tools/ninja/install >/dev/null 2>&1; then
+              make tools/ninja/install || true
             fi
           ) || {
             echo "Minimal host tool build failed, falling back to make tools/install"
