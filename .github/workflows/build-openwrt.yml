@@ -139,8 +139,11 @@ jobs:
           ./scripts/feeds install -a
           
           # Start with fresh defconfig (feeds must be updated first)
-          echo "Running make defconfig..."
-          make defconfig
+          echo "Running make defconfig (with verbose output)..."
+          make defconfig V=s || {
+            echo "ERROR: make defconfig failed"
+            exit 1
+          }
           
           # Append device-specific or generic config based on architecture + device
           ARCH_NAME="${ARCH%%/*}"  # Extract first part (e.g., mediatek from mediatek/filogic)
