@@ -73,6 +73,9 @@ jobs:
           # Prepare kernel sources/headers early so kmod packages can prepare against them
           echo "Preparing kernel sources/headers for target (early)..."
           make target/linux/prepare -j${JOBS}
+          # Install cross toolchain (required for some package builds and host tools)
+          echo "Installing cross toolchain (this may take a while)..."
+          make toolchain/install -j${JOBS}
 
       - name: Build packages (prepare + compile)
         run: |
@@ -102,7 +105,7 @@ jobs:
                 if make -n ${t}/install >/dev/null 2>&1; then
                     if ! make ${t}/install -j${JOBS}; then
                       echo "Install for ${t} failed; re-running with verbose output"
-                      make ${t}/install V=sc -j1 || true
+                      make ${t}/install V=s -j1 || true
                     fi
                   fi
                 fi
@@ -136,7 +139,7 @@ jobs:
               if make -n package/system/apk/host/install >/dev/null 2>&1; then
                 if ! make package/system/apk/host/install -j${JOBS}; then
                   echo "apk host install failed; re-running with verbose output"
-                  make package/system/apk/host/install V=sc -j1 || true
+                  make package/system/apk/host/install V=s -j1 || true
                 fi
               fi
             fi
@@ -148,7 +151,7 @@ jobs:
                 if make -n package/openssl/host/install >/dev/null 2>&1; then
                 if ! make package/openssl/host/install -j${JOBS}; then
                   echo "openssl host install failed; re-running with verbose output"
-                  make package/openssl/host/install V=sc -j1 || true
+                  make package/openssl/host/install V=s -j1 || true
                 fi
               fi
             fi
