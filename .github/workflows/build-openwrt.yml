@@ -70,6 +70,9 @@ jobs:
           ./scripts/feeds update -a
           ./scripts/feeds install -a
           make defconfig
+          # Prepare kernel sources/headers early so kmod packages can prepare against them
+          echo "Preparing kernel sources/headers for target (early)..."
+          make target/linux/prepare -j${JOBS}
 
       - name: Build packages (prepare + compile)
         run: |
@@ -173,9 +176,6 @@ jobs:
 
           # Rebuild package index so make knows about newly added package/* directories
           make package/index
-          # Prepare kernel sources/headers for building external kernel modules
-          echo "Preparing kernel sources/headers for target..."
-          make target/linux/prepare -j${JOBS}
           # Build sequence: prepare and compile required packages only. Keep JOBS small on hosted runners.
           make package/luci-proto-amneziawg/{clean,download,prepare} V=s
           make package/luci-proto-amneziawg/compile -j${JOBS} V=s
