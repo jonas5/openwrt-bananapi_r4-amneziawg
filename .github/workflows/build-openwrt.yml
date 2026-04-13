@@ -87,7 +87,29 @@ jobs:
             # Build small host toolchain pieces commonly required by host package builds
             for t in tools/sed tools/patch tools/tar tools/m4 tools/libdeflate tools/ninja; do
               if make -n ${t}/compile >/dev/null 2>&1; then
+                echo "Building ${t}..."
                 make ${t}/compile -j${JOBS}
+                # After build, try to locate the expected host binary and print diagnostics
+                case "$t" in
+                  tools/sed) bin=sed ;;
+                  tools/patch) bin=patch ;;
+                  tools/tar) bin=tar ;;
+                  tools/m4) bin=m4 ;;
+                  tools/libdeflate) bin=libdeflate-gzip ;;
+                  tools/ninja) bin=ninja ;;
+                  *) bin= ;;
+                esac
+                if [ -n "${bin}" ]; then
+                  if [ -x "${PWD}/staging_dir/host/bin/${bin}" ]; then
+                    echo "Found ${bin} at staging_dir/host/bin/${bin}"
+                    # Print version or file info when possible
+                    ${PWD}/staging_dir/host/bin/${bin} --version 2>/dev/null || ${PWD}/staging_dir/host/bin/${bin} -V 2>/dev/null || true
+                  else
+                    echo "Binary ${bin} not found in staging_dir/host/bin after building ${t}"
+                    echo "Contents of staging_dir/host/bin:"; ls -la "${PWD}/staging_dir/host/bin" || true
+                    echo "Contents of build_dir/hostpkg (recent):"; ls -la "${PWD}/build_dir/hostpkg" | tail -n 20 || true
+                  fi
+                fi
               fi
             done
 
@@ -104,6 +126,18 @@ jobs:
             echo "Minimal host tool build failed, falling back to make tools/install"
             make tools/install -j${JOBS}
           }
+
+          # Verify that essential host binaries exist; if not, fall back to tools/install
+          missing=()
+          for bin in sed libdeflate-gzip openssl; do
+            if [ ! -x "${PWD}/staging_dir/host/bin/$bin" ]; then
+              missing+=("$bin")
+            fi
+          done
+          if [ ${#missing[@]} -ne 0 ]; then
+            echo "Missing host binaries: ${missing[*]} - running make tools/install to ensure host tools are available"
+            make tools/install -j${JOBS}
+          fi
 
           # Rebuild package index so make knows about newly added package/* directories
           make package/index
