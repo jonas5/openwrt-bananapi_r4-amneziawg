@@ -75,7 +75,11 @@ jobs:
           make target/linux/prepare -j${JOBS}
           # Compile kernel (produces linux-*/.config and headers required by external modules)
           echo "Compiling kernel (will generate .config and headers)..."
-          make target/linux/compile -j${JOBS}
+          if ! make target/linux/compile -j${JOBS}; then
+            echo "Kernel compile failed; re-running with verbose output"
+            make target/linux/compile V=s -j1
+            exit 1
+          fi
           # Install cross toolchain (required for some package builds and host tools)
           echo "Installing cross toolchain (this may take a while)..."
           make toolchain/install -j${JOBS}
