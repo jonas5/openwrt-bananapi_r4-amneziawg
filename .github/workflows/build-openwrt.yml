@@ -73,6 +73,9 @@ jobs:
           # Prepare kernel sources/headers early so kmod packages can prepare against them
           echo "Preparing kernel sources/headers for target (early)..."
           make target/linux/prepare -j${JOBS}
+          # Compile kernel (produces linux-*/.config and headers required by external modules)
+          echo "Compiling kernel (will generate .config and headers)..."
+          make target/linux/compile -j${JOBS}
           # Install cross toolchain (required for some package builds and host tools)
           echo "Installing cross toolchain (this may take a while)..."
           make toolchain/install -j${JOBS}
