@@ -201,7 +201,6 @@ jobs:
           
           ./scripts/feeds update -a
           ./scripts/feeds install -a
-          make defconfig
           # Install host build tools first (m4, flex, etc) - required before kernel compile
           echo "Installing host build tools (tools/install) - required for kernel build"
           if ! make tools/install -j${JOBS}; then
