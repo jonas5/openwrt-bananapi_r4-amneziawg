@@ -189,6 +189,12 @@ jobs:
           else
             echo "WARNING: No config file found"
           fi
+          
+          # CRITICAL: Regenerate config to incorporate device-specific kernel options
+          echo "Regenerating config with device-specific options..."
+          unset TARGET_ARCH TARGET_SUBTARGET TARGET_BOARD TARGET_PROFILE
+          make defconfig V=s
+          
           # Install host build tools first (m4, flex, etc) - required before kernel compile
           echo "Installing host build tools (tools/install) - required for kernel build"
           if ! make tools/install -j${JOBS}; then
