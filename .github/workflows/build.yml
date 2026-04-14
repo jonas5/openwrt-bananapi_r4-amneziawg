@@ -23,6 +23,8 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      JOBS: 2
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -31,14 +33,18 @@ jobs:
         id: setup
         run: |
           # Determine version
-          if [ -n "${{ github.event.inputs.openwrt_version }}" ]; then
-            VERSION="${{ github.event.inputs.openwrt_version }}"
-          else
+          VERSION="${{ github.event.inputs.openwrt_version }}"
+          if [ -z "$VERSION" ]; then
             VERSION="snapshot"
           fi
           
           # Determine architecture
           ARCH="${{ github.event.inputs.openwrt_architecture }}"
+          if [ -z "$ARCH" ]; then
+            ARCH="mediatek/filogic"
+          fi
+          
+          # Determine architecture name (replace / with -)
           ARCH_NAME=$(echo "$ARCH" | tr '/' '-')
           
           # Determine device
