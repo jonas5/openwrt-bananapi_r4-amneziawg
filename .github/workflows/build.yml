@@ -1,0 +1,246 @@
+name: Build AmneziaWG OpenWrt Packages
+
+on:
+  workflow_dispatch:
+    inputs:
+      openwrt_version:
+        description: "OpenWrt version (e.g., 25.12.2, leave empty for snapshot)"
+        required: false
+        default: ""
+      openwrt_architecture:
+        description: "Target architecture (e.g., mediatek/filogic, ath79/generic)"
+        required: false
+        default: "mediatek/filogic"
+  push:
+    branches: [ main, master ]
+
+permissions:
+  contents: write
+
+env:
+  JOBS: 2
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up build environment
+        id: setup
+        run: |
+          # Determine version
+          if [ -n "${{ github.event.inputs.openwrt_version }}" ]; then
+            VERSION="${{ github.event.inputs.openwrt_version }}"
+          else
+            VERSION="snapshot"
+          fi
+          
+          # Determine architecture
+          ARCH="${{ github.event.inputs.openwrt_architecture }}"
+          ARCH_NAME=$(echo "$ARCH" | tr '/' '-')
+          
+          # Determine device
+          DEVICE=""
+          if [[ "$ARCH" == "mediatek/filogic" ]]; then
+            DEVICE="bananapi_bpi-r4"
+          fi
+          
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "ARCH=$ARCH" >> $GITHUB_ENV
+          echo "ARCH_NAME=$ARCH_NAME" >> $GITHUB_ENV
+          echo "DEVICE=$DEVICE" >> $GITHUB_ENV
+          
+          echo "Building: $ARCH (device: $DEVICE)"
+
+      - name: Cache OpenWrt SDK
+        id: cache-sdk
+        uses: actions/cache@v4
+        with:
+          path: openwrt-sdk-*/
+          key: ${{ runner.os }}-sdk-${{ env.VERSION }}-${{ env.ARCH_NAME }}
+
+      - name: Download OpenWrt SDK
+        if: steps.cache-sdk.outputs.cache-hit != 'true'
+        run: |
+          # Determine download URL
+          if [ "${{ env.VERSION }}" = "snapshot" ]; then
+            SDK_BASE_URL="https://downloads.openwrt.org/snapshots/targets/${{ env.ARCH }}/"
+          else
+            SDK_BASE_URL="https://downloads.openwrt.org/releases/${{ env.VERSION }}/targets/${{ env.ARCH }}/"
+          fi
+          
+          echo "Fetching SDK list from: $SDK_BASE_URL"
+          
+          # Get SDK filename
+          SDK_FILE=$(curl -s "$SDK_BASE_URL" | grep -o "openwrt-sdk-${{ env.ARCH_NAME }}[^\"]*\.tar\.\(xz\|zst\)" | head -n1)
+          
+          if [ -z "$SDK_FILE" ]; then
+            echo "ERROR: SDK file not found for ${{ env.ARCH_NAME }}"
+            curl -s "$SDK_BASE_URL" | grep -o 'openwrt-sdk[^"]*' | head -10
+            exit 1
+          fi
+          
+          echo "Downloading SDK: $SDK_FILE"
+          wget --show-progress -O "openwrt-sdk.tar.xz" "${SDK_BASE_URL}${SDK_FILE}"
+          
+          echo "Extracting SDK..."
+          tar -xf openwrt-sdk.tar.xz
+          rm openwrt-sdk.tar.xz
+          
+          SDK_DIR=$(find . -maxdepth 1 -name "openwrt-sdk-*" -type d | head -n1)
+          echo "SDK extracted to: $SDK_DIR"
+
+      - name: Setup SDK and copy packages
+        run: |
+          SDK_DIR=$(find . -maxdepth 1 -name "openwrt-sdk-*" -type d | head -n1)
+          WORKSPACE_DIR="${{ github.workspace }}"
+          
+          cd "$SDK_DIR"
+          
+          echo "Setting up SDK..."
+          
+          # Update feeds
+          echo "Updating feeds..."
+          ./scripts/feeds update -a || true
+          ./scripts/feeds install -a || true
+          
+          # Copy local packages
+          echo "Copying packages..."
+          for pkg in "$WORKSPACE_DIR"/package/*; do
+            if [ -d "$pkg" ]; then
+              PKG_NAME=$(basename "$pkg")
+              echo "  Copying $PKG_NAME"
+              rm -rf "package/$PKG_NAME"
+              cp -r "$pkg" "package/"
+            fi
+          done
+
+      - name: Configure packages
+        run: |
+          SDK_DIR=$(find . -maxdepth 1 -name "openwrt-sdk-*" -type d | head -n1)
+          cd "$SDK_DIR"
+          
+          echo "Configuring packages..."
+          
+          # Base package config
+          echo "CONFIG_PACKAGE_kmod-amneziawg=m" > .config
+          echo "CONFIG_PACKAGE_amneziawg-tools=y" >> .config
+          echo "CONFIG_PACKAGE_luci-proto-amneziawg=y" >> .config
+          echo "CONFIG_PACKAGE_kmod-crypto-lib-chacha20=m" >> .config
+          echo "CONFIG_PACKAGE_kmod-crypto-lib-chacha20poly1305=m" >> .config
+          echo "CONFIG_PACKAGE_kmod-crypto-lib-curve25519=m" >> .config
+          echo "CONFIG_PACKAGE_ethtool=m" >> .config
+          
+          # Device-specific config
+          if [ "${{ env.DEVICE }}" = "bananapi_bpi-r4" ]; then
+            echo "Adding BPI-R4 device config..."
+            echo "CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_bananapi_bpi-r4=y" >> .config
+            echo "CONFIG_TARGET_mediatek_filogic_DEVICE_bananapi_bpi-r4=y" >> .config
+            echo "CONFIG_TARGET_BOARD=mediatek" >> .config
+            echo "CONFIG_TARGET_PROFILE=DEVICE_bananapi_bpi-r4" >> .config
+            echo "CONFIG_HAS_SUBTARGETS=y" >> .config
+            echo "CONFIG_TARGET_SUBTARGET=filogic" >> .config
+            echo "CONFIG_NET_UDP_TUNNEL=m" >> .config
+            echo "CONFIG_CRYPTO_CURVE25519=y" >> .config
+          fi
+          
+          # Regenerate config
+          make defconfig
+          
+          echo "Configuration complete"
+
+      - name: Build AmneziaWG packages
+        run: |
+          SDK_DIR=$(find . -maxdepth 1 -name "openwrt-sdk-*" -type d | head -n1)
+          cd "$SDK_DIR"
+          
+          echo "Building packages for ${{ env.ARCH }}..."
+          
+          # Build packages in order
+          for PKG in luci-proto-amneziawg kmod-amneziawg amneziawg-tools; do
+            echo ""
+            echo "=========================================="
+            echo "Building: $PKG"
+            echo "=========================================="
+            
+            # Clean, download, prepare
+            make package/$PKG/{clean,download,prepare} V=s || true
+            
+            # Compile
+            if ! make package/$PKG/compile -j${{ env.JOBS }} V=s; then
+              echo "ERROR: Failed to build $PKG"
+              exit 1
+            fi
+          done
+          
+          echo ""
+          echo "=========================================="
+          echo "Build completed successfully!"
+          echo "=========================================="
+          
+          # List built packages
+          echo "Built packages:"
+          find bin/ -name "*.apk" -o -name "*.ipk" | grep -E "(amneziawg|kmod)" | head -20
+
+      - name: Collect artifacts
+        run: |
+          SDK_DIR=$(find . -maxdepth 1 -name "openwrt-sdk-*" -type d | head -n1)
+          cd "${{ github.workspace }}"
+          
+          mkdir -p artifacts
+          
+          # Copy packages
+          find "$SDK_DIR/bin" -name "amneziawg-tools*.apk" -exec cp {} artifacts/ \; 2>/dev/null || true
+          find "$SDK_DIR/bin" -name "luci-proto-amneziawg*.apk" -exec cp {} artifacts/ \; 2>/dev/null || true
+          find "$SDK_DIR/bin" -name "kmod-amneziawg*.apk" -exec cp {} artifacts/ \; 2>/dev/null || true
+          
+          # Create archive
+          cd artifacts
+          if [ "$(ls -A)" ]; then
+            tar -cJf amneziawg-packages.tar.xz *
+          fi
+          
+          echo "Artifacts:"
+          ls -lah
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: build-${{ env.VERSION }}-${{ env.ARCH_NAME }}-${{ env.DEVICE || 'generic' }}
+          name: "AmneziaWG OpenWrt ${{ env.VERSION }} (${{ env.ARCH }} - ${{ env.DEVICE || 'generic' }})"
+          body: |
+            ## AmneziaWG OpenWrt Packages
+            
+            **OpenWrt Version:** ${{ env.VERSION }}
+            **Architecture:** ${{ env.ARCH }}
+            **Device:** ${{ env.DEVICE || 'generic' }}
+            **Build Date:** ${{ github.event.head_commit.timestamp }}
+            
+            ### Packages Included:
+            - **amneziawg-tools** - Userspace control program
+            - **kmod-amneziawg** - Linux kernel module  
+            - **luci-proto-amneziawg** - LuCI web interface protocol
+            
+            ### Installation:
+            ```bash
+            opkg install amneziawg-tools_*.ipk
+            opkg install luci-proto-amneziawg_*.ipk
+            opkg install kmod-amneziawg_*.ipk
+            ```
+            
+            ### Source:
+            - Repository: ${{ github.repository }}
+            - Commit: ${{ github.sha }}
+          draft: false
+          prerelease: ${{ env.VERSION == 'snapshot' }}
+          files: artifacts/**
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: amneziawg-apks-${{ env.ARCH_NAME }}
+          path: artifacts/**
