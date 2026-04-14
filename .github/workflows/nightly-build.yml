@@ -1,0 +1,407 @@
+name: Nightly Builds - AmneziaWG OpenWrt Packages
+
+on:
+  schedule:
+    - cron: '0 0 * * *'  # Run daily at midnight UTC
+  workflow_dispatch:
+    inputs:
+      openwrt_version:
+        description: "OpenWrt version (e.g., 25.12.2, leave empty for snapshot)"
+        required: false
+        default: ""
+      architectures:
+        description: "Architectures to build (comma-separated, e.g., mediatek/filogic,ramips/mt7621)"
+        required: false
+        default: "mediatek/filogic"
+
+permissions:
+  contents: write
+
+env:
+  JOBS: 2
+
+jobs:
+  generate-config:
+    runs-on: ubuntu-latest
+    outputs:
+      architectures: ${{ steps.generate.outputs.architectures }}
+      version: ${{ steps.generate.outputs.version }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Generate build configuration
+        id: generate
+        run: |
+          # Determine version
+          if [ -n "${{ github.event.inputs.openwrt_version }}" ]; then
+            VERSION="${{ github.event.inputs.openwrt_version }}"
+          else
+            VERSION="snapshot"
+          fi
+          
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          
+          # Parse architectures
+          ARCHS="${{ github.event.inputs.architectures }}"
+          if [ -z "$ARCHS" ]; then
+            # Default architectures for nightly builds
+            ARCHS="mediatek/filogic"
+          fi
+          
+          # Convert to JSON array
+          ARCH_JSON="["
+          FIRST=true
+          for ARCH in $(echo "$ARCHS" | tr ',' ' '); do
+            if [ "$FIRST" = "true" ]; then
+              FIRST=false
+            else
+              ARCH_JSON="${ARCH_JSON},"
+            fi
+            ARCH_JSON="${ARCH_JSON}\"${ARCH}\""
+          done
+          ARCH_JSON="${ARCH_JSON}]"
+          
+          echo "architectures=$ARCH_JSON" >> $GITHUB_OUTPUT
+          
+          echo "Version: $VERSION"
+          echo "Architectures: $ARCH_JSON"
+
+  build:
+    needs: generate-config
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include: ${{ fromJson(needs.generate-config.outputs.architectures) }}
+      fail-fast: false
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up OpenWrt version
+        run: |
+          echo "VERSION=${{ needs.generate-config.outputs.version }}" >> $GITHUB_ENV
+          echo "ARCH=${{ matrix.include }}" >> $GITHUB_ENV
+          ARCH_NAME=$(echo "${{ matrix.include }}" | tr '/' '-')
+          echo "ARCH_NAME=$ARCH_NAME" >> $GITHUB_ENV
+          
+          echo "Building OpenWrt ${{ env.VERSION }} for ${{ matrix.include }} (arch: $ARCH_NAME)"
+
+      - name: Cache OpenWrt SDK
+        id: cache-sdk
+        uses: actions/cache@v4
+        with:
+          path: openwrt-sdk-*/
+          key: ${{ runner.os }}-sdk-${{ env.VERSION }}-${{ env.ARCH_NAME }}
+
+      - name: Download OpenWrt SDK
+        if: steps.cache-sdk.outputs.cache-hit != 'true'
+        run: |
+          cd "${{ github.workspace }}"
+          
+          # Determine download URL
+          if [ "${{ env.VERSION }}" = "snapshot" ]; then
+            SDK_BASE_URL="https://downloads.openwrt.org/snapshots/targets/${{ env.ARCH }}/"
+          else
+            SDK_BASE_URL="https://downloads.openwrt.org/releases/${{ env.VERSION }}/targets/${{ env.ARCH }}/"
+          fi
+          
+          echo "Fetching SDK list from: $SDK_BASE_URL"
+          
+          # Get SDK filename - look for the SDK tarball
+          SDK_PATTERN="openwrt-sdk-${{ env.VERSION }}-${{ env.ARCH }}-gcc-\d+_musl\.\w+\.Linux-x86_64\.tar\.\(xz\|zst\)"
+          SDK_FILE=$(curl -s "$SDK_BASE_URL" | grep -oP "$SDK_PATTERN" | head -n1 || echo "")
+          
+          if [ -z "$SDK_FILE" ]; then
+            # Alternative pattern matching
+            SDK_FILE=$(curl -s "$SDK_BASE_URL" | grep -o 'openwrt-sdk[^"]*\.tar\.xz' | head -n1 || echo "")
+          fi
+          
+          if [ -z "$SDK_FILE" ]; then
+            echo "ERROR: SDK file not found for ${{ env.ARCH }} at $SDK_BASE_URL"
+            echo "Available files:"
+            curl -s "$SDK_BASE_URL" | grep -o 'openwrt-sdk[^"]*' | head -10
+            exit 1
+          fi
+          
+          SDK_URL="${SDK_BASE_URL}${SDK_FILE}"
+          echo "Downloading SDK: $SDK_URL"
+          
+          wget --show-progress -O "openwrt-sdk.tar.xz" "$SDK_URL"
+          
+          echo "Extracting SDK..."
+          tar -xf openwrt-sdk.tar.xz
+          rm openwrt-sdk.tar.xz
+          
+          SDK_DIR=$(find . -maxdepth 1 -name "openwrt-sdk-*" -type d | head -n1)
+          echo "SDK extracted to: $SDK_DIR"
+          echo "SDK_DIR=$SDK_DIR" >> $GITHUB_ENV
+
+      - name: Setup SDK and copy packages
+        run: |
+          cd "${{ env.SDK_DIR }}"
+          
+          echo "Setting up SDK at $(pwd)"
+          
+          # Update feeds
+          echo "Updating feeds..."
+          ./scripts/feeds update -a || true
+          ./scripts/feeds install -a || true
+          
+          # Copy local packages
+          WORKSPACE_DIR="${{ github.workspace }}"
+          
+          echo "Copying packages from repository..."
+          if [ -d "$WORKSPACE_DIR/package" ]; then
+            for pkg in "$WORKSPACE_DIR"/package/*; do
+              if [ -d "$pkg" ]; then
+                PKG_NAME=$(basename "$pkg")
+                echo "  Copying $PKG_NAME"
+                rm -rf "package/$PKG_NAME"
+                cp -r "$pkg" "package/"
+              fi
+            done
+          fi
+          
+          # Verify packages
+          echo "Verifying packages..."
+          ls -la package/ | grep amneziawg || echo "Warning: AmneziaWG packages not found!"
+
+      - name: Configure packages
+        run: |
+          cd "${{ env.SDK_DIR }}"
+          
+          # Determine device from architecture
+          ARCH="${{ env.ARCH }}"
+          DEVICE=""
+          
+          if [[ "$ARCH" == "mediatek/filogic" ]]; then
+            # BPI-R4 requires special device selection
+            DEVICE="bananapi_bpi-r4"
+          fi
+          
+          # Create device-specific config
+          echo "Configuring for $ARCH $DEVICE..."
+          
+          # Base package config
+          cat > .config << 'EOF'
+CONFIG_PACKAGE_kmod-amneziawg=m
+CONFIG_PACKAGE_amneziawg-tools=y
+CONFIG_PACKAGE_luci-proto-amneziawg=y
+CONFIG_PACKAGE_kmod-crypto-lib-chacha20=m
+CONFIG_PACKAGE_kmod-crypto-lib-chacha20poly1305=m
+CONFIG_PACKAGE_kmod-crypto-lib-curve25519=m
+CONFIG_PACKAGE_ethtool=m
+EOF
+          
+          # Add device-specific settings
+          if [ -n "$DEVICE" ]; then
+            echo "Adding device config for: $DEVICE"
+            case "$DEVICE" in
+              bananapi_bpi-r4)
+                cat >> .config << 'EOF'
+CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_bananapi_bpi-r4=y
+CONFIG_TARGET_mediatek_filogic_DEVICE_bananapi_bpi-r4=y
+CONFIG_TARGET_BOARD=mediatek
+CONFIG_TARGET_PROFILE=DEVICE_bananapi_bpi-r4
+CONFIG_HAS_SUBTARGETS=y
+CONFIG_TARGET_SUBTARGET=filogic
+CONFIG_NET_UDP_TUNNEL=m
+CONFIG_CRYPTO_CURVE25519=y
+EOF
+                ;;
+            esac
+          fi
+          
+          # Regenerate config
+          make defconfig
+          
+          echo "Configuration complete"
+          head -20 .config
+
+      - name: Build AmneziaWG packages
+        run: |
+          cd "${{ env.SDK_DIR }}"
+          
+          echo "Building AmneziaWG packages for ${{ env.ARCH }}..."
+          
+          # Build sequence
+          PACKAGES="luci-proto-amneziawg kmod-amneziawg amneziawg-tools"
+          
+          for PKG in $PACKAGES; do
+            echo ""
+            echo "=========================================="
+            echo "Building: $PKG"
+            echo "=========================================="
+            
+            # Clean, download, prepare
+            make package/$PKG/{clean,download,prepare} V=s || {
+              echo "Warning: prepare failed for $PKG, continuing..."
+              true
+            }
+            
+            # Compile
+            make package/$PKG/compile -j${{ env.JOBS }} V=s || {
+              echo "ERROR: Failed to build $PKG"
+              exit 1
+            }
+          done
+          
+          echo ""
+          echo "=========================================="
+          echo "Build completed successfully!"
+          echo "=========================================="
+          
+          # List built packages
+          echo "Built packages:"
+          find bin/ -name "*.apk" -o -name "*.ipk" | grep -E "(amneziawg|kmod)" | head -20
+
+      - name: Prepare release artifacts
+        run: |
+          cd "${{ github.workspace }}"
+          
+          mkdir -p "release-${{ env.ARCH_NAME }}"
+          cd "${{ env.SDK_DIR }}"
+          
+          # Copy packages with naming scheme
+          POSTFIX="${VERSION}_${ARCH_NAME}"
+          
+          echo "Preparing artifacts for: $POSTFIX"
+          
+          # Package tools (userspace)
+          find bin/packages -name "amneziawg-tools*.apk" -exec sh -c '
+            file="$1"
+            ext="${file##*.}"
+            name=$(basename "$file" ".$ext")
+            cp "$file" "${{ github.workspace }}/release-${{ env.ARCH_NAME }}/${name}_${VERSION}_${ARCH_NAME}.$ext"
+          ' _ {} \;
+          
+          # LuCI protocol
+          find bin/packages -name "luci-proto-amneziawg*.apk" -exec sh -c '
+            file="$1"
+            ext="${file##*.}"
+            name=$(basename "$file" ".$ext")
+            cp "$file" "${{ github.workspace }}/release-${{ env.ARCH_NAME }}/${name}_${VERSION}_${ARCH_NAME}.$ext"
+          ' _ {} \;
+          
+          # Kernel modules (from targets)
+          find bin/targets -name "kmod-amneziawg*.apk" -exec sh -c '
+            file="$1"
+            ext="${file##*.}"
+            name=$(basename "$file" ".$ext")
+            cp "$file" "${{ github.workspace }}/release-${{ env.ARCH_NAME }}/${name}_${VERSION}_${ARCH_NAME}.$ext"
+          ' _ {} \;
+          
+          # Also copy from packages dir for kmod (some builds put it there)
+          find bin/packages -name "kmod-amneziawg*.apk" -exec sh -c '
+            file="$1"
+            ext="${file##*.}"
+            name=$(basename "$file" ".$ext")
+            cp "$file" "${{ github.workspace }}/release-${{ env.ARCH_NAME }}/${name}_${VERSION}_${ARCH_NAME}.$ext"
+          ' _ {} \;
+          
+          echo ""
+          echo "Release artifacts:"
+          ls -lah "${{ github.workspace }}/release-${{ env.ARCH_NAME }}/"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: nightly-${{ env.VERSION }}-${{ env.ARCH_NAME }}
+          name: "AmneziaWG OpenWrt Nightly (${{ env.ARCH_NAME }})"
+          body: |
+            ## AmneziaWG OpenWrt Packages - Nightly Build
+            
+            **OpenWrt Version:** ${{ env.VERSION }}
+            **Architecture:** ${{ env.ARCH }}
+            **Build Date:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')
+            
+            ### Packages Included:
+            - **amneziawg-tools** - Userspace control program
+            - **kmod-amneziawg** - Linux kernel module
+            - **luci-proto-amneziawg** - LuCI web interface protocol
+            
+            ### Installation:
+            ```bash
+            # Copy APKs to router and install
+            opkg install amneziawg-tools_*.ipk
+            opkg install luci-proto-amneziawg_*.ipk
+            opkg install kmod-amneziawg_*.ipk
+            ```
+            
+            ### Source:
+            - Repository: ${{ github.repository }}
+            - Commit: ${{ github.sha }}
+          draft: false
+          prerelease: true
+          files: release-${{ env.ARCH_NAME }}/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  create-aggregate-release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up version
+        run: |
+          if [ -n "${{ github.event.inputs.openwrt_version }}" ]; then
+            VERSION="${{ github.event.inputs.openwrt_version }}"
+          else
+            VERSION="snapshot"
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+      - name: Collect all artifacts
+        run: |
+          mkdir -p all-releases
+          
+          # Copy all architecture releases
+          for dir in release-*/; do
+            if [ -d "$dir" ]; then
+              echo "Copying artifacts from $dir"
+              cp -r "$dir"/* all-releases/ || true
+            fi
+          done
+          
+          echo ""
+          echo "All collected artifacts:"
+          ls -lah all-releases/
+
+      - name: Create aggregate release
+        if: needs.build.result == 'success'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: nightly-${{ env.VERSION }}-all
+          name: "AmneziaWG OpenWrt Nightly (All Architectures)"
+          body: |
+            ## AmneziaWG OpenWrt Packages - Nightly Build (All Architectures)
+            
+            **OpenWrt Version:** ${{ env.VERSION }}
+            **Build Date:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')
+            **Architectures Built:** ${{ needs.generate-config.outputs.architectures }}
+            
+            ### Available Architectures:
+            ${{ needs.generate-config.outputs.architectures }}
+            
+            ### Packages Included (per architecture):
+            - **amneziawg-tools** - Userspace control program
+            - **kmod-amneziawg** - Linux kernel module
+            - **luci-proto-amneziawg** - LuCI web interface protocol
+            
+            ### Installation:
+            Select the appropriate packages for your router's architecture and install with:
+            ```bash
+            opkg install <package>_<architecture>.ipk
+            ```
+            
+            ### Source:
+            - Repository: ${{ github.repository }}
+            - Commit: ${{ github.sha }}
+          draft: false
+          prerelease: true
+          files: all-releases/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
