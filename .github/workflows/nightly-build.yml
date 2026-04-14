@@ -110,16 +110,18 @@ jobs:
           echo "Fetching SDK list from: $SDK_BASE_URL"
           
           # Get SDK filename - look for the SDK tarball
-          SDK_PATTERN="openwrt-sdk-${{ env.VERSION }}-${{ env.ARCH }}-gcc-\d+_musl\.\w+\.Linux-x86_64\.tar\.\(xz\|zst\)"
+          # SDK files are named: openwrt-sdk-{ARCH_NAME}_gcc-{VERSION}_musl.Linux-x86_64.tar.{xz,zst}
+          # ARCH_NAME uses underscores (e.g., mediatek-filogic)
+          SDK_PATTERN="openwrt-sdk-${{ env.ARCH_NAME }}_gcc-[0-9.]*_musl\.Linux-x86_64\.tar\.\(xz\|zst\)"
           SDK_FILE=$(curl -s "$SDK_BASE_URL" | grep -oP "$SDK_PATTERN" | head -n1 || echo "")
           
           if [ -z "$SDK_FILE" ]; then
-            # Alternative pattern matching
-            SDK_FILE=$(curl -s "$SDK_BASE_URL" | grep -o 'openwrt-sdk[^"]*\.tar\.xz' | head -n1 || echo "")
+            # Alternative pattern - look for any SDK file matching our architecture
+            SDK_FILE=$(curl -s "$SDK_BASE_URL" | grep -o "openwrt-sdk-${{ env.ARCH_NAME }}[^\"]*\.tar\.\(xz\|zst\)" | head -n1 || echo "")
           fi
           
           if [ -z "$SDK_FILE" ]; then
-            echo "ERROR: SDK file not found for ${{ env.ARCH }} at $SDK_BASE_URL"
+            echo "ERROR: SDK file not found for ${{ env.ARCH_NAME }} at $SDK_BASE_URL"
             echo "Available files:"
             curl -s "$SDK_BASE_URL" | grep -o 'openwrt-sdk[^"]*' | head -10
             exit 1
