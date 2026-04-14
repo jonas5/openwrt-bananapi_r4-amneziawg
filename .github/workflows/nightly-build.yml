@@ -184,31 +184,27 @@ jobs:
           echo "Configuring for $ARCH $DEVICE..."
           
           # Base package config
-          cat > .config << 'EOF'
-CONFIG_PACKAGE_kmod-amneziawg=m
-CONFIG_PACKAGE_amneziawg-tools=y
-CONFIG_PACKAGE_luci-proto-amneziawg=y
-CONFIG_PACKAGE_kmod-crypto-lib-chacha20=m
-CONFIG_PACKAGE_kmod-crypto-lib-chacha20poly1305=m
-CONFIG_PACKAGE_kmod-crypto-lib-curve25519=m
-CONFIG_PACKAGE_ethtool=m
-EOF
+          echo "CONFIG_PACKAGE_kmod-amneziawg=m" > .config
+          echo "CONFIG_PACKAGE_amneziawg-tools=y" >> .config
+          echo "CONFIG_PACKAGE_luci-proto-amneziawg=y" >> .config
+          echo "CONFIG_PACKAGE_kmod-crypto-lib-chacha20=m" >> .config
+          echo "CONFIG_PACKAGE_kmod-crypto-lib-chacha20poly1305=m" >> .config
+          echo "CONFIG_PACKAGE_kmod-crypto-lib-curve25519=m" >> .config
+          echo "CONFIG_PACKAGE_ethtool=m" >> .config
           
           # Add device-specific settings
           if [ -n "$DEVICE" ]; then
             echo "Adding device config for: $DEVICE"
             case "$DEVICE" in
               bananapi_bpi-r4)
-                cat >> .config << 'EOF'
-CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_bananapi_bpi-r4=y
-CONFIG_TARGET_mediatek_filogic_DEVICE_bananapi_bpi-r4=y
-CONFIG_TARGET_BOARD=mediatek
-CONFIG_TARGET_PROFILE=DEVICE_bananapi_bpi-r4
-CONFIG_HAS_SUBTARGETS=y
-CONFIG_TARGET_SUBTARGET=filogic
-CONFIG_NET_UDP_TUNNEL=m
-CONFIG_CRYPTO_CURVE25519=y
-EOF
+                echo "CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_bananapi_bpi-r4=y" >> .config
+                echo "CONFIG_TARGET_mediatek_filogic_DEVICE_bananapi_bpi-r4=y" >> .config
+                echo "CONFIG_TARGET_BOARD=mediatek" >> .config
+                echo "CONFIG_TARGET_PROFILE=DEVICE_bananapi_bpi-r4" >> .config
+                echo "CONFIG_HAS_SUBTARGETS=y" >> .config
+                echo "CONFIG_TARGET_SUBTARGET=filogic" >> .config
+                echo "CONFIG_NET_UDP_TUNNEL=m" >> .config
+                echo "CONFIG_CRYPTO_CURVE25519=y" >> .config
                 ;;
             esac
           fi
@@ -314,7 +310,7 @@ EOF
             
             **OpenWrt Version:** ${{ env.VERSION }}
             **Architecture:** ${{ env.ARCH }}
-            **Build Date:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')
+            **Build Date:** ${{ github.event.head_commit.timestamp }}
             
             ### Packages Included:
             - **amneziawg-tools** - Userspace control program
@@ -380,11 +376,8 @@ EOF
             ## AmneziaWG OpenWrt Packages - Nightly Build (All Architectures)
             
             **OpenWrt Version:** ${{ env.VERSION }}
-            **Build Date:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')
-            **Architectures Built:** ${{ needs.generate-config.outputs.architectures }}
-            
-            ### Available Architectures:
-            ${{ needs.generate-config.outputs.architectures }}
+            **Build Date:** ${{ github.event.head_commit.timestamp }}
+            **Architectures Built:** See artifacts below
             
             ### Packages Included (per architecture):
             - **amneziawg-tools** - Userspace control program
