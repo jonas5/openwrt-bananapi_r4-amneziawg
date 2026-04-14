@@ -24,7 +24,7 @@ jobs:
   generate-config:
     runs-on: ubuntu-latest
     outputs:
-      architectures: ${{ steps.generate.outputs.architectures }}
+      matrix: ${{ steps.generate.outputs.matrix }}
       version: ${{ steps.generate.outputs.version }}
     steps:
       - name: Checkout code
@@ -49,30 +49,32 @@ jobs:
             ARCHS="mediatek/filogic"
           fi
           
-          # Convert to JSON array
-          ARCH_JSON="["
+          # Generate matrix JSON with proper format for GitHub Actions
+          # Format: {"include": [{"arch": "mediatek/filogic", ...}, ...]}
+          MATRIX_JSON='{"include":['
           FIRST=true
-          for ARCH in $(echo "$ARCHS" | tr ',' ' '); do
+          for ARCH in $ARCHS; do
             if [ "$FIRST" = "true" ]; then
               FIRST=false
             else
-              ARCH_JSON="${ARCH_JSON},"
+              MATRIX_JSON="${MATRIX_JSON},"
             fi
-            ARCH_JSON="${ARCH_JSON}\"${ARCH}\""
+            ARCH_NAME=$(echo "$ARCH" | tr '/' '-')
+            MATRIX_JSON="${MATRIX_JSON}{\"arch\":\"${ARCH}\",\"arch_name\":\"${ARCH_NAME}\"}"
           done
-          ARCH_JSON="${ARCH_JSON}]"
+          MATRIX_JSON="${MATRIX_JSON}]}"
           
-          echo "architectures=$ARCH_JSON" >> $GITHUB_OUTPUT
+          echo "matrix=$MATRIX_JSON" >> $GITHUB_OUTPUT
           
           echo "Version: $VERSION"
-          echo "Architectures: $ARCH_JSON"
+          echo "Architectures: $ARCHS"
+          echo "Matrix: $MATRIX_JSON"
 
   build:
     needs: generate-config
     runs-on: ubuntu-latest
     strategy:
-      matrix:
-        include: ${{ fromJson(needs.generate-config.outputs.architectures) }}
+      matrix: ${{ fromJson(needs.generate-config.outputs.matrix) }}
       fail-fast: false
     steps:
       - name: Checkout code
@@ -81,11 +83,10 @@ jobs:
       - name: Set up OpenWrt version
         run: |
           echo "VERSION=${{ needs.generate-config.outputs.version }}" >> $GITHUB_ENV
-          echo "ARCH=${{ matrix.include }}" >> $GITHUB_ENV
-          ARCH_NAME=$(echo "${{ matrix.include }}" | tr '/' '-')
-          echo "ARCH_NAME=$ARCH_NAME" >> $GITHUB_ENV
+          echo "ARCH=${{ matrix.arch }}" >> $GITHUB_ENV
+          echo "ARCH_NAME=${{ matrix.arch_name }}" >> $GITHUB_ENV
           
-          echo "Building OpenWrt ${{ env.VERSION }} for ${{ matrix.include }} (arch: $ARCH_NAME)"
+          echo "Building OpenWrt ${{ env.VERSION }} for ${{ matrix.arch }} (arch: ${{ matrix.arch_name }})"
 
       - name: Cache OpenWrt SDK
         id: cache-sdk
