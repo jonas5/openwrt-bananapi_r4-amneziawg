@@ -21,6 +21,8 @@ on:
 jobs:
   package-only:
     runs-on: ubuntu-22.04
+    permissions:
+      contents: write
     env:
       OPENWRT_SRC: ${{ github.workspace }}/openwrt-main
       ARTIFACT_DIR: ${{ github.workspace }}/artifacts
