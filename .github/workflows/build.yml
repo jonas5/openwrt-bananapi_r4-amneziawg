@@ -228,21 +228,22 @@ jobs:
           SDK_DIR=$(find . -maxdepth 1 -name "openwrt-sdk-*" -type d | head -n1)
           cd "${{ github.workspace }}"
           
-          mkdir -p artifacts
+          # Copy packages to architecture-specific directory
+          mkdir -p artifacts/${{ env.ARCH_NAME }}
           
-          # Copy packages
-          find "$SDK_DIR/bin" -name "amneziawg-tools*.apk" -exec cp {} artifacts/ \; 2>/dev/null || true
-          find "$SDK_DIR/bin" -name "luci-proto-amneziawg*.apk" -exec cp {} artifacts/ \; 2>/dev/null || true
-          find "$SDK_DIR/bin" -name "kmod-amneziawg*.apk" -exec cp {} artifacts/ \; 2>/dev/null || true
+          find "$SDK_DIR/bin" -name "amneziawg-tools*.apk" -exec cp {} artifacts/${{ env.ARCH_NAME }}/ \; 2>/dev/null || true
+          find "$SDK_DIR/bin" -name "luci-proto-amneziawg*.apk" -exec cp {} artifacts/${{ env.ARCH_NAME }}/ \; 2>/dev/null || true
+          find "$SDK_DIR/bin" -name "kmod-amneziawg*.apk" -exec cp {} artifacts/${{ env.ARCH_NAME }}/ \; 2>/dev/null || true
           
           # Create archive with architecture in filename
           cd artifacts
           if [ "$(ls -A)" ]; then
-            tar -cJf amneziawg-${{ env.ARCH_NAME }}-${{ env.VERSION }}.tar.xz *
+            tar -cJf amneziawg-${{ env.ARCH_NAME }}-${{ env.VERSION }}.tar.xz ${{ env.ARCH_NAME }}/*
           fi
           
           echo "Artifacts:"
           ls -lah
+          ls -lah ${{ env.ARCH_NAME }}/
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
