@@ -281,5 +281,6 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: amneziawg-${{ env.ARCH_NAME }}-${{ env.VERSION }}
+          name: amneziawg-${{ env.ARCH_NAME }}-${{ env.VERSION }}-${{ strategy.job-index }}
           path: artifacts/**
+          overwrite: true
