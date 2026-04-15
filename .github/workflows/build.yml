@@ -55,8 +55,13 @@ jobs:
             ARCH="${{ matrix.arch }}"
           fi
           
-          # Determine architecture name
-          ARCH_NAME=$(echo "$ARCH" | tr '/' '-')
+          # Determine architecture name and SDK path
+          # bcm2712 uses bcm27xx path
+          if [[ "$ARCH" == "bcm2712" ]]; then
+            ARCH_NAME="bcm27xx-bcm2712"
+          else
+            ARCH_NAME=$(echo "$ARCH" | tr '/' '-')
+          fi
           
           # Determine device
           DEVICE="${{ matrix.device }}"
