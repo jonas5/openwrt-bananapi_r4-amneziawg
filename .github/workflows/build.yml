@@ -34,6 +34,8 @@ jobs:
             device: "bananapi_bpi-r4"
           - arch: "bcm2712"
             device: ""
+          - arch: "armsr/armv8"
+            device: ""
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
