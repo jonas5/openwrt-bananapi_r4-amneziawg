@@ -48,11 +48,19 @@ jobs:
             VERSION="snapshot"
           fi
           
+          # Remove 'v' prefix if present
+          VERSION="${VERSION#v}"
+          
           # Determine architecture (use matrix for push, inputs for dispatch)
           if [ -n "${{ github.event.inputs.openwrt_architecture }}" ]; then
             ARCH="${{ github.event.inputs.openwrt_architecture }}"
           else
             ARCH="${{ matrix.arch }}"
+          fi
+          
+          # Handle comma-separated architectures by using only the first one for dispatch
+          if [[ "$ARCH" == *,* ]]; then
+            ARCH=$(echo "$ARCH" | cut -d',' -f1)
           fi
           
           # Determine architecture name and SDK path
@@ -81,7 +89,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: openwrt-sdk-*/
-          key: ${{ runner.os }}-sdk-${{ env.VERSION }}-${{ env.ARCH_NAME }}
+          key: ${{ runner.os }}-sdk-${{ env.VERSION }}-${{ env.ARCH }}-${{ env.DEVICE || 'generic' }}
+          restore-keys: |
+            ${{ runner.os }}-sdk-${{ env.VERSION }}-${{ env.ARCH }}-
 
       - name: Download OpenWrt SDK
         if: steps.cache-sdk.outputs.cache-hit != 'true'
