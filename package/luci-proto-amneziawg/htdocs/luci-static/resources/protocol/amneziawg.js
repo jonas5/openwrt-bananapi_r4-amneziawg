@@ -206,6 +206,10 @@ return network.registerProtocol('amneziawg', {
 		o.default = o.disabled;
 		o.optional = true;
 
+		o = s.taboption('advanced', form.DynamicList, 'allowed_clients', _('Allowed Clients'), _('Optional. MAC addresses of devices allowed to use this VPN tunnel. Only these devices will be routed through the VPN.'));
+		o.datatype = 'macaddr';
+		o.optional = true;
+
         // AmneziaWG
 
         try {

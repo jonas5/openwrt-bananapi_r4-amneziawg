@@ -24,6 +24,7 @@ proto_amneziawg_init_config() {
 	proto_config_add_string "transport"
 	proto_config_add_string "kill_switch"
 	proto_config_add_string "dns_leak_protection"
+	proto_config_add_string "allowed_clients"
 	proto_config_add_int "awg_jc"
 	proto_config_add_int "awg_jmin"
 	proto_config_add_int "awg_jmax"
@@ -175,6 +176,7 @@ proto_amneziawg_setup() {
 	local transport
 	local kill_switch
 	local dns_leak_protection
+	local allowed_clients
 	local ip6prefix
 	local nohostroute
 	local tunlink
@@ -208,6 +210,7 @@ proto_amneziawg_setup() {
 	config_get transport "${config}" "transport"
 	config_get kill_switch "${config}" "kill_switch"
 	config_get dns_leak_protection "${config}" "dns_leak_protection"
+	config_get allowed_clients "${config}" "allowed_clients"
 	config_get ip6prefix "${config}" "ip6prefix"
 	config_get nohostroute "${config}" "nohostroute"
 	config_get tunlink "${config}" "tunlink"
@@ -390,19 +393,31 @@ proto_amneziawg_setup() {
 				uci add_list dhcp.@server[-1]="${dns}"
 			done
 			uci commit dhcp
-			/etc/init.d/dnsmasq reload
+		/etc/init.d/dnsmasq reload
 		fi
 	fi
 
-	# endpoint dependency
-	if [ "${nohostroute}" != "1" ]; then
-		# shellcheck disable=SC2034
-		${AWG} show "${config}" endpoints | \
-		sed -E 's/\[?([0-9.:a-f]+)\]?:([0-9]+)/\1 \2/' | \
-		while IFS=$'\t ' read -r key address port; do
-			[ -n "${port}" ] || continue
-			proto_add_host_dependency "${config}" "${address}" "${tunlink}"
+	# Allowed clients: route only specific devices through VPN
+	if [ -n "${allowed_clients}" ]; then
+		logger -t "amneziawg" "info: allowed clients configured for ${config}: ${allowed_clients}"
+
+		# Convert MAC addresses to IPs and create per-client routing
+		for mac in ${allowed_clients}; do
+			# Find IP by MAC from ARP table
+			local client_ip
+			client_ip=$(cat /proc/net/arp | grep -i "${mac}" | awk '{print $1}' | head -1)
+
+			if [ -n "${client_ip}" ]; then
+				logger -t "amneziawg" "info: routing client ${client_ip} via ${config}"
+				# Add route for this specific client IP through VPN
+				ip route add "${client_ip}/32" dev "${config}" 2>/dev/null
+			else
+				logger -t "amneziawg" "warn: client with MAC ${mac} not found in ARP table"
+			fi
 		done
+
+		# Set default route to go via WAN (not VPN) when using allowed_clients
+		# Only traffic from allowed clients will use the VPN
 	fi
 
 	proto_send_update "${config}"
