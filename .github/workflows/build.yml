@@ -32,15 +32,33 @@ jobs:
         include:
           - arch: "mediatek/filogic"
             device: "bananapi_bpi-r4"
+            arch_name: "mediatek-filogic"
           - arch: "bcm2712"
             device: ""
+            arch_name: "bcm27xx-bcm2712"
           - arch: "armsr/armv8"
             device: ""
+            arch_name: "armsr-armv8"
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Check if should build
+        id: should-build
+        run: |
+          REQUESTED_ARCH="${{ github.event.inputs.openwrt_architecture }}"
+          CURRENT_ARCH="${{ matrix.arch }}"
+          
+          # If dispatch with specific arch, only build matching
+          if [ -n "$REQUESTED_ARCH" ] && [ "$REQUESTED_ARCH" != "$CURRENT_ARCH" ]; then
+            echo "Skipping: requested $REQUESTED_ARCH, this job is $CURRENT_ARCH"
+            echo "should_build=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          echo "should_build=true" >> $GITHUB_OUTPUT
+
       - name: Set up build environment
+        if: steps.should-build.outputs.should_build == 'true'
         id: setup
         run: |
           # Determine version
@@ -65,12 +83,14 @@ jobs:
             ARCH=$(echo "$ARCH" | cut -d',' -f1)
           fi
           
-          # Determine architecture name and SDK path
-          # bcm2712 uses bcm27xx path
-          if [[ "$ARCH" == "bcm2712" ]]; then
-            ARCH_NAME="bcm27xx-bcm2712"
-          else
-            ARCH_NAME=$(echo "$ARCH" | tr '/' '-')
+          # Determine architecture name (use matrix value)
+          ARCH_NAME="${{ matrix.arch_name }}"
+          if [ -z "$ARCH_NAME" ]; then
+            if [[ "$ARCH" == "bcm2712" ]]; then
+              ARCH_NAME="bcm27xx-bcm2712"
+            else
+              ARCH_NAME=$(echo "$ARCH" | tr '/' '-')
+            fi
           fi
           
           # Determine device
@@ -87,6 +107,7 @@ jobs:
           echo "Building: $ARCH (device: $DEVICE)"
 
       - name: Cache OpenWrt SDK
+        if: steps.should-build.outputs.should_build == 'true'
         id: cache-sdk
         uses: actions/cache@v4
         with:
@@ -96,7 +117,7 @@ jobs:
             ${{ runner.os }}-sdk-${{ env.VERSION }}-${{ env.ARCH }}-
 
       - name: Download OpenWrt SDK
-        if: steps.cache-sdk.outputs.cache-hit != 'true'
+        if: steps.should-build.outputs.should_build == 'true' && steps.cache-sdk.outputs.cache-hit != 'true'
         run: |
           # Determine SDK path (bcm2712 uses bcm27xx subdirectory)
           if [[ "${{ env.ARCH }}" == "bcm2712" ]]; then
@@ -134,6 +155,7 @@ jobs:
           echo "SDK extracted to: $SDK_DIR"
 
       - name: Setup SDK and copy packages
+        if: steps.should-build.outputs.should_build == 'true'
         run: |
           SDK_DIR=$(find . -maxdepth 1 -name "openwrt-sdk-*" -type d | head -n1)
           WORKSPACE_DIR="${{ github.workspace }}"
@@ -159,6 +181,7 @@ jobs:
           done
 
       - name: Configure packages
+        if: steps.should-build.outputs.should_build == 'true'
         run: |
           SDK_DIR=$(find . -maxdepth 1 -name "openwrt-sdk-*" -type d | head -n1)
           cd "$SDK_DIR"
@@ -193,6 +216,7 @@ jobs:
           echo "Configuration complete"
 
       - name: Build AmneziaWG packages
+        if: steps.should-build.outputs.should_build == 'true'
         run: |
           SDK_DIR=$(find . -maxdepth 1 -name "openwrt-sdk-*" -type d | head -n1)
           cd "$SDK_DIR"
@@ -226,6 +250,7 @@ jobs:
           find bin/ -name "*.apk" -o -name "*.ipk" | grep -E "(amneziawg|kmod)" | head -20
 
       - name: Collect artifacts
+        if: steps.should-build.outputs.should_build == 'true'
         run: |
           SDK_DIR=$(find . -maxdepth 1 -name "openwrt-sdk-*" -type d | head -n1)
           cd "${{ github.workspace }}"
@@ -248,6 +273,7 @@ jobs:
           ls -lah ${{ env.ARCH_NAME }}/
 
       - name: Create GitHub Release
+        if: steps.should-build.outputs.should_build == 'true'
         uses: softprops/action-gh-release@v1
         with:
           tag_name: build-${{ env.VERSION }}-${{ env.ARCH_NAME }}-${{ env.DEVICE || 'generic' }}
@@ -282,6 +308,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload artifacts
+        if: steps.should-build.outputs.should_build == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: amneziawg-${{ env.ARCH_NAME }}-${{ env.VERSION }}-${{ strategy.job-index }}
