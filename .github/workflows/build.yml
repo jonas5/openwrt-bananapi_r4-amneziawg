@@ -86,11 +86,18 @@ jobs:
       - name: Download OpenWrt SDK
         if: steps.cache-sdk.outputs.cache-hit != 'true'
         run: |
+          # Determine SDK path (bcm2712 uses bcm27xx subdirectory)
+          if [[ "${{ env.ARCH }}" == "bcm2712" ]]; then
+            SDK_TARGET_PATH="bcm27xx/bcm2712"
+          else
+            SDK_TARGET_PATH="${{ env.ARCH }}"
+          fi
+          
           # Determine download URL
           if [ "${{ env.VERSION }}" = "snapshot" ]; then
-            SDK_BASE_URL="https://downloads.openwrt.org/snapshots/targets/${{ env.ARCH }}/"
+            SDK_BASE_URL="https://downloads.openwrt.org/snapshots/targets/${SDK_TARGET_PATH}/"
           else
-            SDK_BASE_URL="https://downloads.openwrt.org/releases/${{ env.VERSION }}/targets/${{ env.ARCH }}/"
+            SDK_BASE_URL="https://downloads.openwrt.org/releases/${{ env.VERSION }}/targets/${SDK_TARGET_PATH}/"
           fi
           
           echo "Fetching SDK list from: $SDK_BASE_URL"
