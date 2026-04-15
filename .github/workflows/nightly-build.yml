@@ -46,7 +46,7 @@ jobs:
           ARCHS="${{ github.event.inputs.architectures }}"
           if [ -z "$ARCHS" ]; then
             # Default architectures for nightly builds
-            ARCHS="mediatek/filogic"
+            ARCHS="mediatek/filogic,bcm2712"
           fi
           
           # Generate matrix JSON with proper format for GitHub Actions
