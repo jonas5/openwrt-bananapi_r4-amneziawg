@@ -164,6 +164,12 @@ return network.registerProtocol('amneziawg', {
 		o.placeholder = _('random');
 		o.optional = true;
 
+		o = s.taboption('general', form.ListValue, 'transport', _('Transport'), _('Optional. Transport protocol for AmneziaWG. TCP can be used to bypass firewalls.'));
+		o.value('udp', _('UDP'));
+		o.value('tcp', _('TCP'));
+		o.default = 'udp';
+		o.optional = true;
+
 		o = s.taboption('general', form.DynamicList, 'addresses', _('IP Addresses'), _('Recommended. IP addresses of the AmneziaWG interface.'));
 		o.datatype = 'ipaddr';
 		o.optional = true;

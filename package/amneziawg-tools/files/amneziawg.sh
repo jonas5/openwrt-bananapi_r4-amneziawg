@@ -21,6 +21,7 @@ proto_amneziawg_init_config() {
 	proto_config_add_int "listen_port"
 	proto_config_add_int "mtu"
 	proto_config_add_string "fwmark"
+	proto_config_add_string "transport"
 	proto_config_add_int "awg_jc"
 	proto_config_add_int "awg_jmin"
 	proto_config_add_int "awg_jmax"
@@ -169,6 +170,7 @@ proto_amneziawg_setup() {
 	local addresses
 	local mtu
 	local fwmark
+	local transport
 	local ip6prefix
 	local nohostroute
 	local tunlink
@@ -199,6 +201,7 @@ proto_amneziawg_setup() {
 	config_get addresses "${config}" "addresses"
 	config_get mtu "${config}" "mtu"
 	config_get fwmark "${config}" "fwmark"
+	config_get transport "${config}" "transport"
 	config_get ip6prefix "${config}" "ip6prefix"
 	config_get nohostroute "${config}" "nohostroute"
 	config_get tunlink "${config}" "tunlink"
@@ -245,6 +248,9 @@ proto_amneziawg_setup() {
 	fi
 	if [ "${fwmark}" ]; then
 		echo "FwMark=${fwmark}" >> "${awg_cfg}"
+	fi
+	if [ "${transport}" = "tcp" ]; then
+		echo "tcp_fallback=true" >> "${awg_cfg}"
 	fi
 	# AmneziaWG parameters
 	if [ "${awg_jc}" ]; then
