@@ -8,11 +8,14 @@ on:
         required: false
         default: ""
       openwrt_architecture:
-        description: "Target architecture (e.g., mediatek/filogic, ath79/generic)"
+        description: "Target architecture (e.g., mediatek/filogic, bcm2712)"
         required: false
         default: "mediatek/filogic"
   push:
     branches: [ main, master ]
+    paths-ignore:
+      - 'README.md'
+      - 'configs/**'
 
 permissions:
   contents: write
@@ -23,8 +26,14 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      JOBS: 2
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: "mediatek/filogic"
+            device: "bananapi_bpi-r4"
+          - arch: "bcm2712"
+            device: ""
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -33,23 +42,25 @@ jobs:
         id: setup
         run: |
           # Determine version
-          VERSION="${{ github.event.inputs.openwrt_version }}"
-          if [ -z "$VERSION" ]; then
+          if [ -n "${{ github.event.inputs.openwrt_version }}" ]; then
+            VERSION="${{ github.event.inputs.openwrt_version }}"
+          else
             VERSION="snapshot"
           fi
           
-          # Determine architecture
-          ARCH="${{ github.event.inputs.openwrt_architecture }}"
-          if [ -z "$ARCH" ]; then
-            ARCH="mediatek/filogic"
+          # Determine architecture (use matrix for push, inputs for dispatch)
+          if [ -n "${{ github.event.inputs.openwrt_architecture }}" ]; then
+            ARCH="${{ github.event.inputs.openwrt_architecture }}"
+          else
+            ARCH="${{ matrix.arch }}"
           fi
           
-          # Determine architecture name (replace / with -)
+          # Determine architecture name
           ARCH_NAME=$(echo "$ARCH" | tr '/' '-')
           
           # Determine device
-          DEVICE=""
-          if [[ "$ARCH" == "mediatek/filogic" ]]; then
+          DEVICE="${{ matrix.device }}"
+          if [[ "$ARCH" == "mediatek/filogic" ]] && [ -z "$DEVICE" ]; then
             DEVICE="bananapi_bpi-r4"
           fi
           
@@ -205,7 +216,7 @@ jobs:
           # Create archive
           cd artifacts
           if [ "$(ls -A)" ]; then
-            tar -cJf amneziawg-packages.tar.xz *
+            tar -cJf amneziawg-packages-${{ env.ARCH_NAME }}.tar.xz *
           fi
           
           echo "Artifacts:"
