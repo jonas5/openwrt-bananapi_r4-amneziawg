@@ -112,8 +112,8 @@ jobs:
           
           echo "Fetching SDK list from: $SDK_BASE_URL"
           
-          # Get SDK filename
-          SDK_FILE=$(curl -s "$SDK_BASE_URL" | grep -o "openwrt-sdk-${{ env.ARCH_NAME }}[^\"]*\.tar\.\(xz\|zst\)" | head -n1)
+          # Get SDK filename (matches openwrt-sdk-<version>-<arch>_<compiler>.Linux-x86_64.tar.zst)
+          SDK_FILE=$(curl -s "$SDK_BASE_URL" | grep -o "openwrt-sdk-[^\"]*\.tar\.\(xz\|zst\)" | head -n1)
           
           if [ -z "$SDK_FILE" ]; then
             echo "ERROR: SDK file not found for ${{ env.ARCH_NAME }}"
