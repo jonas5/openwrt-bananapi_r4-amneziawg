@@ -231,14 +231,14 @@ jobs:
           mkdir -p artifacts
           
           # Copy packages
-          find "$SDK_DIR/bin" -name "amneziawg-tools*.apk" -exec cp {} artifacts/ \; 2>/dev/null || true
-          find "$SDK_DIR/bin" -name "luci-proto-amneziawg*.apk" -exec cp {} artifacts/ \; 2>/dev/null || true
-          find "$SDK_DIR/bin" -name "kmod-amneziawg*.apk" -exec cp {} artifacts/ \; 2>/dev/null || true
+          find "$SDK_DIR/bin" -name "amneziawg-tools*.ipk" -exec cp {} artifacts/ \; 2>/dev/null || true
+          find "$SDK_DIR/bin" -name "luci-proto-amneziawg*.ipk" -exec cp {} artifacts/ \; 2>/dev/null || true
+          find "$SDK_DIR/bin" -name "kmod-amneziawg*.ipk" -exec cp {} artifacts/ \; 2>/dev/null || true
           
-          # Create archive
+          # Create archive with architecture in filename
           cd artifacts
           if [ "$(ls -A)" ]; then
-            tar -cJf amneziawg-packages-${{ env.ARCH_NAME }}.tar.xz *
+            tar -cJf amneziawg-${{ env.ARCH_NAME }}-${{ env.VERSION }}.tar.xz *
           fi
           
           echo "Artifacts:"
@@ -248,7 +248,7 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           tag_name: build-${{ env.VERSION }}-${{ env.ARCH_NAME }}-${{ env.DEVICE || 'generic' }}
-          name: "AmneziaWG OpenWrt ${{ env.VERSION }} (${{ env.ARCH }} - ${{ env.DEVICE || 'generic' }})"
+          name: "AmneziaWG OpenWrt ${{ env.VERSION }} (${{ env.ARCH_NAME }})"
           body: |
             ## AmneziaWG OpenWrt Packages
             
@@ -281,5 +281,5 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: amneziawg-apks-${{ env.ARCH_NAME }}
+          name: amneziawg-${{ env.ARCH_NAME }}-${{ env.VERSION }}
           path: artifacts/**
