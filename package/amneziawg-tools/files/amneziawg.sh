@@ -22,6 +22,8 @@ proto_amneziawg_init_config() {
 	proto_config_add_int "mtu"
 	proto_config_add_string "fwmark"
 	proto_config_add_string "transport"
+	proto_config_add_string "kill_switch"
+	proto_config_add_string "dns_leak_protection"
 	proto_config_add_int "awg_jc"
 	proto_config_add_int "awg_jmin"
 	proto_config_add_int "awg_jmax"
@@ -171,6 +173,8 @@ proto_amneziawg_setup() {
 	local mtu
 	local fwmark
 	local transport
+	local kill_switch
+	local dns_leak_protection
 	local ip6prefix
 	local nohostroute
 	local tunlink
@@ -202,6 +206,8 @@ proto_amneziawg_setup() {
 	config_get mtu "${config}" "mtu"
 	config_get fwmark "${config}" "fwmark"
 	config_get transport "${config}" "transport"
+	config_get kill_switch "${config}" "kill_switch"
+	config_get dns_leak_protection "${config}" "dns_leak_protection"
 	config_get ip6prefix "${config}" "ip6prefix"
 	config_get nohostroute "${config}" "nohostroute"
 	config_get tunlink "${config}" "tunlink"
@@ -335,6 +341,58 @@ proto_amneziawg_setup() {
 	for prefix in ${ip6prefix}; do
 		proto_add_ipv6_prefix "$prefix"
 	done
+
+	# Kill switch: set default route via VPN and block traffic when VPN is down
+	if [ "${kill_switch}" = "1" ]; then
+		logger -t "amneziawg" "info: kill switch enabled for ${config}"
+
+		# Add default route via VPN for IPv4
+		ip route add default dev "${config}" 2>/dev/null
+
+		# Add default route via VPN for IPv6
+		ip -6 route add default dev "${config}" 2>/dev/null
+
+		# Create firewall rule to block traffic when VPN is down
+		uci set firewall.amneziawg_killswitch=rule
+		uci set firewall.amneziawg_killswitch.src='lan'
+		uci set firewall.amneziawg_killswitch.dest='wan'
+		uci set firewall.amneziawg_killswitch.proto='all'
+		uci set firewall.amneziawg_killswitch.extra='-m policy --dir in --policy REJECT'
+		uci set firewall.amneziawg_killswitch.target='REJECT'
+		uci commit firewall
+	fi
+
+	# DNS leak protection: ensure DNS queries go through VPN tunnel
+	if [ "${dns_leak_protection}" = "1" ]; then
+		logger -t "amneziawg" "info: DNS leak protection enabled for ${config}"
+
+		# Get DNS from config or use the interface IP as DNS
+		local dns_servers
+		config_get dns_servers "${config}" "dns"
+
+		if [ -z "${dns_servers}" ]; then
+			# Use the interface address as DNS server
+			dns_servers="${addresses%% *}"
+		fi
+
+		if [ -n "${dns_servers}" ]; then
+			# Override DHCP/DNS to use VPN DNS only
+			uci set dhcp.@dnsmasq[0].noresolv='1'
+			uci set dhcp.@dnsmasq[0].rebind_domain_allow=''
+
+			# Clear existing server entries
+			while uci delete dhcp.@server[-1] 2>/dev/null; do
+				:
+			done
+
+			# Add VPN DNS servers
+			for dns in ${dns_servers}; do
+				uci add_list dhcp.@server[-1]="${dns}"
+			done
+			uci commit dhcp
+			/etc/init.d/dnsmasq reload
+		fi
+	fi
 
 	# endpoint dependency
 	if [ "${nohostroute}" != "1" ]; then

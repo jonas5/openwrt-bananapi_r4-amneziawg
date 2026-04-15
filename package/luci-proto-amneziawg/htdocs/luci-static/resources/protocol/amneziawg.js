@@ -170,18 +170,17 @@ return network.registerProtocol('amneziawg', {
 		o.default = 'udp';
 		o.optional = true;
 
+		o = s.taboption('general', form.Flag, 'kill_switch', _('Kill Switch'), _('Optional. Block all internet traffic when VPN connection drops.'));
+		o.default = o.disabled;
+		o.optional = true;
+
+		o = s.taboption('general', form.Flag, 'dns_leak_protection', _('DNS Leak Protection'), _('Optional. Ensure DNS queries go through the VPN tunnel.'));
+		o.default = o.disabled;
+		o.optional = true;
+
 		o = s.taboption('general', form.DynamicList, 'addresses', _('IP Addresses'), _('Recommended. IP addresses of the AmneziaWG interface.'));
 		o.datatype = 'ipaddr';
 		o.optional = true;
-
-		o = s.taboption('general', form.Flag, 'nohostroute', _('No Host Routes'), _('Optional. Do not create host routes to peers.'));
-		o.optional = true;
-
-		o = s.taboption('general', form.Button, '_import', _('Import configuration'), _('Imports settings from an existing AmneziaWG configuration file'));
-		o.inputtitle = _('Load configuration…');
-		o.onclick = function() {
-			return ss.handleConfigImport('full');
-		};
 
 		// -- advanced --------------------------------------------------------------------
 
@@ -198,6 +197,14 @@ return network.registerProtocol('amneziawg', {
 
 			return true;
 		};
+
+		o = s.taboption('advanced', form.Flag, 'kill_switch', _('Kill Switch'), _('Optional. Block all internet traffic when VPN connection drops.'));
+		o.default = o.disabled;
+		o.optional = true;
+
+		o = s.taboption('advanced', form.Flag, 'dns_leak_protection', _('DNS Leak Protection'), _('Optional. Ensure DNS queries go through the VPN tunnel.'));
+		o.default = o.disabled;
+		o.optional = true;
 
         // AmneziaWG
 
