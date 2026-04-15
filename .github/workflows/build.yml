@@ -231,9 +231,9 @@ jobs:
           mkdir -p artifacts
           
           # Copy packages
-          find "$SDK_DIR/bin" -name "amneziawg-tools*.ipk" -exec cp {} artifacts/ \; 2>/dev/null || true
-          find "$SDK_DIR/bin" -name "luci-proto-amneziawg*.ipk" -exec cp {} artifacts/ \; 2>/dev/null || true
-          find "$SDK_DIR/bin" -name "kmod-amneziawg*.ipk" -exec cp {} artifacts/ \; 2>/dev/null || true
+          find "$SDK_DIR/bin" -name "amneziawg-tools*.apk" -exec cp {} artifacts/ \; 2>/dev/null || true
+          find "$SDK_DIR/bin" -name "luci-proto-amneziawg*.apk" -exec cp {} artifacts/ \; 2>/dev/null || true
+          find "$SDK_DIR/bin" -name "kmod-amneziawg*.apk" -exec cp {} artifacts/ \; 2>/dev/null || true
           
           # Create archive with architecture in filename
           cd artifacts
@@ -264,9 +264,9 @@ jobs:
             
             ### Installation:
             ```bash
-            opkg install amneziawg-tools_*.ipk
-            opkg install luci-proto-amneziawg_*.ipk
-            opkg install kmod-amneziawg_*.ipk
+            apk add amneziawg-tools_*.apk
+            apk add luci-proto-amneziawg_*.apk
+            apk add kmod-amneziawg_*.apk
             ```
             
             ### Source:
