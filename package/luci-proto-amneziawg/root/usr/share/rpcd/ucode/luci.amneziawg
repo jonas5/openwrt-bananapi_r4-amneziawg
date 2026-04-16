@@ -79,13 +79,27 @@ const methods = {
 							public_key: record[2],
 							listen_port: record[3],
 							fwmark: record[4],
-							peers: []
+							peers: [],
+							features: {}
 						};
 
 						if (!length(record[2]) || record[2] == '(none)')
 							qr_pubkey[last_device] = '';
 						else
 							qr_pubkey[last_device] = `PublicKey = ${record[2]}`;
+
+						// Get interface configuration options
+						uci.foreach('network', last_device, (s) => {
+							data[last_device].features = {
+								transport: s.transport || 'udp',
+								kill_switch: s.kill_switch || '0',
+								dns_leak_protection: s.dns_leak_protection || '0',
+								allowed_clients: s.allowed_clients || '',
+								download_limit: s.download_limit || '',
+								upload_limit: s.upload_limit || '',
+								addresses: s.addresses || ''
+							};
+						});
 					}
 					else {
 						let peer_name;
@@ -120,6 +134,30 @@ const methods = {
 			}
 
 			return data;
+		}
+	},
+
+	getAwgTraffic: {
+		call: function() {
+			const traffic = {};
+			const uci = cursor();
+			uci.load("network");
+
+			// Get all amneziawg interfaces
+			uci.foreach('network', 'interface', (iface) => {
+				if (iface.proto === 'amneziawg') {
+					const ifname = iface['.name'];
+					const stats = popen(`cat /sys/class/net/${ifname}/statistics/rx_bytes 2>/dev/null`);
+					const tx_stats = popen(`cat /sys/class/net/${ifname}/statistics/tx_bytes 2>/dev/null`);
+
+					traffic[ifname] = {
+						rx_bytes: trim(stats?.read?.('all') ?? '0'),
+						tx_bytes: trim(tx_stats?.read?.('all') ?? '0')
+					};
+				}
+			});
+
+			return traffic;
 		}
 	}
 };

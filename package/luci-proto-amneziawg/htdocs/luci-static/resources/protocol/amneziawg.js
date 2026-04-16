@@ -210,6 +210,14 @@ return network.registerProtocol('amneziawg', {
 		o.datatype = 'macaddr';
 		o.optional = true;
 
+		o = s.taboption('advanced', form.Value, 'download_limit', _('Download Limit'), _('Optional. Download speed limit (e.g., 10M, 5M, 500K).'));
+		o.placeholder = _('unlimited');
+		o.optional = true;
+
+		o = s.taboption('advanced', form.Value, 'upload_limit', _('Upload Limit'), _('Optional. Upload speed limit (e.g., 10M, 5M, 500K).'));
+		o.placeholder = _('unlimited');
+		o.optional = true;
+
         // AmneziaWG
 
         try {

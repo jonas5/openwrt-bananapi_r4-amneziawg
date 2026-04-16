@@ -4,10 +4,12 @@
 		"read": {
 			"ubus": {
 				"luci.amneziawg": [
-					"getAwgInstances"
+					"getAwgInstances",
+					"getAwgTraffic"
 				]
 			},
-			"uci": [ "ddns", "system", "network" ]
+			"uci": [ "ddns", "system", "network" ],
+			"file": [ "/sys/class/net/*/statistics/*" ]
 		},
 		"write": {
 			"ubus": {

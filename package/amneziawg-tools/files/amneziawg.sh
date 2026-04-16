@@ -25,6 +25,8 @@ proto_amneziawg_init_config() {
 	proto_config_add_string "kill_switch"
 	proto_config_add_string "dns_leak_protection"
 	proto_config_add_string "allowed_clients"
+	proto_config_add_int "upload_limit"
+	proto_config_add_int "download_limit"
 	proto_config_add_int "awg_jc"
 	proto_config_add_int "awg_jmin"
 	proto_config_add_int "awg_jmax"
@@ -177,6 +179,8 @@ proto_amneziawg_setup() {
 	local kill_switch
 	local dns_leak_protection
 	local allowed_clients
+	local upload_limit
+	local download_limit
 	local ip6prefix
 	local nohostroute
 	local tunlink
@@ -211,6 +215,8 @@ proto_amneziawg_setup() {
 	config_get kill_switch "${config}" "kill_switch"
 	config_get dns_leak_protection "${config}" "dns_leak_protection"
 	config_get allowed_clients "${config}" "allowed_clients"
+	config_get upload_limit "${config}" "upload_limit"
+	config_get download_limit "${config}" "download_limit"
 	config_get ip6prefix "${config}" "ip6prefix"
 	config_get nohostroute "${config}" "nohostroute"
 	config_get tunlink "${config}" "tunlink"
@@ -420,6 +426,58 @@ proto_amneziawg_setup() {
 		# Only traffic from allowed clients will use the VPN
 	fi
 
+	# Bandwidth limits using tc (traffic control)
+	if [ -n "${download_limit}" ] || [ -n "${upload_limit}" ]; then
+		logger -t "amneziawg" "info: applying bandwidth limits for ${config}"
+
+		# Remove any existing qdiscs
+		tc qdisc del dev "${config}" root 2>/dev/null
+
+		# Download limit (ingress shaping)
+		if [ -n "${download_limit}" ]; then
+			# Convert Kbps/Mbps to bit/s
+			local dl_rate
+			case "${download_limit}" in
+				*M)
+					dl_rate=$(( ${download_limit%M} * 1000 * 1000 ))
+					;;
+				*K)
+					dl_rate=$(( ${download_limit%K} * 1000 ))
+					;;
+				*)
+					dl_rate=$(( ${download_limit} * 1000 ))
+					;;
+			esac
+
+			logger -t "amneziawg" "info: download limit ${download_limit} (${dl_rate} bit/s)"
+			tc qdisc add dev "${config}" root handle ffff: htb default 1
+			tc class add dev "${config}" parent ffff: classid 1:1 htb rate "${dl_rate}" burst 15k
+			tc filter add dev "${config}" parent ffff: protocol all prio 10 u32 match u32 0 0 flowid 1:1
+		fi
+
+		# Upload limit (egress shaping)
+		if [ -n "${upload_limit}" ]; then
+			# Convert Kbps/Mbps to bit/s
+			local ul_rate
+			case "${upload_limit}" in
+				*M)
+					ul_rate=$(( ${upload_limit%M} * 1000 * 1000 ))
+					;;
+				*K)
+					ul_rate=$(( ${upload_limit%K} * 1000 ))
+					;;
+				*)
+					ul_rate=$(( ${upload_limit} * 1000 ))
+					;;
+			esac
+
+			logger -t "amneziawg" "info: upload limit ${upload_limit} (${ul_rate} bit/s)"
+			tc qdisc add dev "${config}" root handle 1: htb default 10
+			tc class add dev "${config}" parent 1: classid 1:10 htb rate "${ul_rate}" burst 15k
+			tc filter add dev "${config}" parent 1: protocol all prio 10 u32 match u32 0 0 flowid 1:10
+		fi
+	fi
+
 	proto_send_update "${config}"
 }
 
@@ -430,6 +488,9 @@ proto_amneziawg_teardown() {
 	else
 		rm -f "/var/run/amneziawg/${config}.sock"
 	fi
+
+	# Clean up tc qdiscs (bandwidth limits)
+	tc qdisc del dev "${config}" root 2>/dev/null
 }
 
 [ -n "$INCLUDE_ONLY" ] || {
